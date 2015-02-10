@@ -791,4 +791,6 @@ sym_Init(void)
 
 	math_DefinePI();
 
+	sym_AddEqu("_Z80", 1);
+
 }
