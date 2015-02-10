@@ -473,7 +473,7 @@ void	if_skip_to_endc( void )
 %token	T_Z80_RL T_Z80_RLA T_Z80_RLC T_Z80_RLCA
 %token	T_Z80_RR T_Z80_RRA T_Z80_RRC T_Z80_RRCA
 %token	T_Z80_SBC T_Z80_SCF T_Z80_STOP
-%token	T_Z80_SLA T_Z80_SRA T_Z80_SRL T_Z80_SUB T_Z80_SWAP
+%token	T_Z80_SLA T_Z80_SRA T_Z80_SRL T_Z80_SUB
 %token	T_Z80_XOR
 
 %token	T_Z80_IN
@@ -1210,7 +1210,6 @@ cpu_command		:	z80_adc
 				|	z80_srl
 				|	z80_stop
 				|	z80_sub
-				|	z80_swap
 				|	z80_xor
 				
 				|	z80_in
@@ -1661,13 +1660,6 @@ z80_stop		:	T_Z80_STOP
 
 z80_sub			:	T_Z80_SUB op_a_n	{ out_AbsByte(0xD6); out_RelByte(&$2); }
 				|	T_Z80_SUB op_a_r	{ out_AbsByte(0x90|$2); }
-;
-
-z80_swap		:	T_Z80_SWAP reg_r
-					{
-						yyerror("SWAP is not a Z80 instruction");
-						//out_AbsByte(0xCB); out_AbsByte(0x30|$2);
-					}
 ;
 
 z80_xor			:	T_Z80_XOR op_a_n	{ out_AbsByte(0xEE); out_RelByte(&$2); }
