@@ -1295,10 +1295,10 @@ z80_ei			:	T_Z80_EI
 z80_im			:	T_Z80_IM const_8bit
 					{
 						out_AbsByte(0xed);
-						if (&$2.nVal == 0) out_AbsByte(0x46);
-						else if (&$2.nVal == 1) out_AbsByte(0x56);
-						else if (&$2.nVal == 2) out_AbsByte(0x5e);
-						else yyerror("%d is not a valid interrupt mode", &$2.nVal);
+						if ($2.nVal == 0) out_AbsByte(0x46);
+						else if ($2.nVal == 1) out_AbsByte(0x56);
+						else if ($2.nVal == 2) out_AbsByte(0x5e);
+						else yyerror("%d is not a valid interrupt mode", $2.nVal);
 					}
 ;
 
