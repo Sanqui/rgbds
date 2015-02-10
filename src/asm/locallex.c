@@ -48,7 +48,7 @@ struct sLexInitString localstrings[] = {
 	
 	{"in", T_Z80_IN},
 	{"out", T_Z80_OUT},
-	{"im", T_Z80_OUT},
+	{"im", T_Z80_IM},
 //	{"ldi", T_Z80_LDI},
 	{"cpi", T_Z80_CPI},
 	{"ini", T_Z80_INI},

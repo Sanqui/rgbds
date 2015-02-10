@@ -1387,23 +1387,25 @@ z80_in			:	T_Z80_IN T_MODE_A comma op_mem_ind
 							yyerror("IN source address cannot be relocatable");
 						}
 						if ($4.nVal < 0x00 || $4.nVal > 0xff) {
-							yyerror("IN source address $%x must be byte", $4.nVal);
+							yyerror("IN source address [$%x] must be byte", $4.nVal);
 						}
 						out_AbsByte(0xdb);
 						out_RelByte(&$4);
 					}
+;
 
-z80_out			:	T_Z80_IN op_mem_ind comma T_MODE_A
+z80_out			:	T_Z80_OUT op_mem_ind comma T_MODE_A
 					{
 						if (rpn_isReloc(&$2)) {
-							yyerror("IN destination address cannot be relocatable");
+							yyerror("OUT destination address cannot be relocatable");
 						}
 						if ($2.nVal < 0x00 || $2.nVal > 0xff) {
-							yyerror("OUT destination address $%x must be byte", $2.nVal);
+							yyerror("OUT destination address [$%x] must be byte", $2.nVal);
 						}
 						out_AbsByte(0xd3);
 						out_RelByte(&$2);
 					}
+;
 
 z80_ld			:	z80_ld_mem
 				|	z80_ld_cind
