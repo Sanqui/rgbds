@@ -476,6 +476,27 @@ void	if_skip_to_endc( void )
 %token	T_Z80_SLA T_Z80_SRA T_Z80_SRL T_Z80_SUB T_Z80_SWAP
 %token	T_Z80_XOR
 
+%token	T_Z80_IN
+%token	T_Z80_OUT
+%token	T_Z80_IM
+//%token T_Z80_LDI
+%token T_Z80_CPI
+%token T_Z80_INI
+%token T_Z80_OTI
+//%token T_Z80_LDD
+%token T_Z80_CPD
+%token T_Z80_IND
+%token T_Z80_OTD
+%token T_Z80_LDIR
+%token T_Z80_CPIR
+%token T_Z80_INIR
+%token T_Z80_OTIR
+%token T_Z80_LDDR
+%token T_Z80_CPDR
+%token T_Z80_INDR
+%token T_Z80_OTDR
+%token T_Z80_RETN
+
 %token	T_MODE_A T_MODE_B T_MODE_C T_MODE_C_IND T_MODE_D T_MODE_E T_MODE_H T_MODE_L
 %token	T_MODE_AF
 %token	T_MODE_BC T_MODE_BC_IND
@@ -1162,8 +1183,8 @@ cpu_command		:	z80_adc
 				|	z80_jp
 				|	z80_jr
 				|	z80_ld
-				|	z80_ldd
-				|	z80_ldi
+				|	gb_ldd
+				|	gb_ldi
 				|	z80_ldio
 				|	z80_nop
 				|	z80_or
@@ -1191,6 +1212,27 @@ cpu_command		:	z80_adc
 				|	z80_sub
 				|	z80_swap
 				|	z80_xor
+				
+				|	z80_in
+				|	z80_out
+				|	z80_im
+				|	z80_ldi
+				|	z80_cpi
+				|	z80_ini
+				|	z80_oti
+				|	z80_ldd
+				|	z80_cpd
+				|	z80_ind
+				|	z80_otd
+				|	z80_ldir
+				|	z80_cpir
+				|	z80_inir
+				|	z80_otir
+				|	z80_lddr
+				|	z80_cpdr
+				|	z80_indr
+				|	z80_otdr
+				|	z80_retn
 ;
 
 z80_adc			:	T_Z80_ADC op_a_n	{ out_AbsByte(0xCE); out_RelByte(&$2); }
@@ -1201,7 +1243,10 @@ z80_add			:	T_Z80_ADD op_a_n	{ out_AbsByte(0xC6); out_RelByte(&$2); }
 				|	T_Z80_ADD op_a_r	{ out_AbsByte(0x80|$2); }
 				|	T_Z80_ADD op_hl_ss	{ out_AbsByte(0x09|($2<<4)); }
 				|	T_Z80_ADD T_MODE_SP comma const_8bit
-					{ out_AbsByte(0xE8); out_RelByte(&$4); }
+					{
+						yyerror("ADD SP, $nn is not a valid Z80 instruction");
+						//out_AbsByte(0xE8); out_RelByte(&$4);
+					}
 
 ;
 
@@ -1247,6 +1292,16 @@ z80_ei			:	T_Z80_EI
 					{ out_AbsByte(0xFB); }
 ;
 
+z80_im			:	T_Z80_IM const_8bit
+					{
+						out_AbsByte(0xed);
+						if (&$2.nVal == 0) out_AbsByte(0x46);
+						else if (&$2.nVal == 1) out_AbsByte(0x56);
+						else if (&$2.nVal == 2) out_AbsByte(0x5e);
+						else yyerror("%d is not a valid interrupt mode", &$2.nVal);
+					}
+;
+
 z80_ex			:	T_Z80_EX T_MODE_HL comma T_MODE_SP_IND
 					{ out_AbsByte(0xE3); }
 				|	T_Z80_EX T_MODE_SP_IND comma T_MODE_HL
@@ -1284,13 +1339,13 @@ z80_jr			:	T_Z80_JR const_PCrel
 					{ out_AbsByte(0x20|($2<<3)); out_PCRelByte(&$4); }
 ;
 
-z80_ldi			:	T_Z80_LDI T_MODE_HL_IND comma T_MODE_A
+gb_ldi			:	T_Z80_LDI T_MODE_HL_IND comma T_MODE_A
 					{ out_AbsByte(0x02|(2<<4)); }
 				|	T_Z80_LDI T_MODE_A comma T_MODE_HL
 					{ out_AbsByte(0x0A|(2<<4)); }
 ;
 
-z80_ldd			:	T_Z80_LDD T_MODE_HL_IND comma T_MODE_A
+gb_ldd			:	T_Z80_LDD T_MODE_HL_IND comma T_MODE_A
 					{ out_AbsByte(0x02|(3<<4)); }
 				|	T_Z80_LDD T_MODE_A comma T_MODE_HL
 					{ out_AbsByte(0x0A|(3<<4)); }
@@ -1326,6 +1381,30 @@ z80_ldio		:	T_Z80_LDIO T_MODE_A comma op_mem_ind
 					}
 ;
 
+z80_in			:	T_Z80_IN T_MODE_A comma op_mem_ind
+					{
+						if (rpn_isReloc(&$4)) {
+							yyerror("IN source address cannot be relocatable");
+						}
+						if ($4.nVal < 0x00 || $4.nVal > 0xff) {
+							yyerror("IN source address $%x must be byte", $4.nVal);
+						}
+						out_AbsByte(0xdb);
+						out_RelByte(&$4);
+					}
+
+z80_out			:	T_Z80_IN op_mem_ind comma T_MODE_A
+					{
+						if (rpn_isReloc(&$2)) {
+							yyerror("IN destination address cannot be relocatable");
+						}
+						if ($2.nVal < 0x00 || $2.nVal > 0xff) {
+							yyerror("OUT destination address $%x must be byte", $2.nVal);
+						}
+						out_AbsByte(0xd3);
+						out_RelByte(&$2);
+					}
+
 z80_ld			:	z80_ld_mem
 				|	z80_ld_cind
 				|	z80_ld_rr
@@ -1337,9 +1416,15 @@ z80_ld			:	z80_ld_mem
 ;
 
 z80_ld_hl		:	T_Z80_LD T_MODE_HL comma '[' T_MODE_SP const_8bit ']'
-					{ out_AbsByte(0xF8); out_RelByte(&$6); }
+					{
+						yyerror("LD HL, [SP+$nn] is not a valid Z80 instruction");
+						//out_AbsByte(0xF8); out_RelByte(&$6);
+					}
 				|	T_Z80_LD T_MODE_HL comma T_MODE_SP const_8bit
-					{ out_AbsByte(0xF8); out_RelByte(&$5); }
+					{
+						yyerror("LD HL, SP+$nn is not a valid Z80 instruction");
+						//out_AbsByte(0xF8); out_RelByte(&$5);
+					}
 				|	T_Z80_LD T_MODE_HL comma const_16bit
 					{ out_AbsByte(0x01|(REG_HL<<4)); out_RelWord(&$4); }
 ;
@@ -1350,28 +1435,46 @@ z80_ld_sp		:	T_Z80_LD T_MODE_SP comma T_MODE_HL
 ;
 
 z80_ld_mem		:	T_Z80_LD op_mem_ind comma T_MODE_SP
-					{ out_AbsByte(0x08); out_RelWord(&$2); }
+					{ 
+						//out_AbsByte(0x08);
+						out_AbsByte(0xed);
+						out_AbsByte(0x73);
+						out_RelWord(&$2);
+					}
 				|	T_Z80_LD op_mem_ind comma T_MODE_A
 					{
-						if( (!rpn_isReloc(&$2)) && $2.nVal>=0xFF00)
+						/*if( (!rpn_isReloc(&$2)) && $2.nVal>=0xFF00)
 						{
 							out_AbsByte(0xE0);
 							out_AbsByte($2.nVal&0xFF);
 						}
-						else
+						else*/
 						{
-							out_AbsByte(0xEA);
+							out_AbsByte(0x32); // 0xEA
 							out_RelWord(&$2);
 						}
 					}
 ;
 
 z80_ld_cind		:	T_Z80_LD T_MODE_C_IND comma T_MODE_A
-					{ out_AbsByte(0xE2); }
+					{
+						yyerror("LD [$FF00+c] is not a valid Z80 instruction");
+						//out_AbsByte(0xE2);
+					}
 ;
 
 z80_ld_rr		:	T_Z80_LD reg_rr comma T_MODE_A
-					{ out_AbsByte(0x02|($2<<4)); }
+					{ 
+						if ($2==T_MODE_HL_INDINC) { // ld [hli], a 
+							out_AbsByte(0x77); // ld a, [hl]
+							out_AbsByte(0x23); // inc hl
+						} else if ($2==T_MODE_HL_INDDEC) {
+							out_AbsByte(0x77); // ld a, [hl]
+							out_AbsByte(0x2b); // dec hl
+						} else {
+							out_AbsByte(0x02|($2<<4));
+						}
+					}
 ;
 
 z80_ld_r		:	T_Z80_LD reg_r comma const_8bit
@@ -1398,8 +1501,17 @@ z80_ld_a		:	T_Z80_LD reg_r comma T_MODE_C_IND
 					}
 				|	T_Z80_LD reg_r comma reg_rr
 					{
-						if( $2==REG_A )
-							out_AbsByte(0x0A|($4<<4));
+						if( $2==REG_A ) {
+							if ($4==T_MODE_HL_INDINC) { // ld a, [hli]
+								out_AbsByte(0x7e); // ld a, [hl]
+								out_AbsByte(0x23); // inc hl
+							} else if ($4==T_MODE_HL_INDDEC) {
+								out_AbsByte(0x7e); // ld a, [hl]
+								out_AbsByte(0x2b); // dec hl
+							} else {
+								out_AbsByte(0x0A|($4<<4));
+							}
+						}
 						else
 						{
 							yyerror("Destination operand must be A");
@@ -1409,14 +1521,14 @@ z80_ld_a		:	T_Z80_LD reg_r comma T_MODE_C_IND
 					{
 						if( $2==REG_A )
 						{
-							if( (!rpn_isReloc(&$4)) && $4.nVal>=0xFF00 )
+							/*if( (!rpn_isReloc(&$4)) && $4.nVal>=0xFF00 )
 							{
 								out_AbsByte(0xF0);
 								out_AbsByte($4.nVal&0xFF);
 							}
-							else
+							else*/
 							{
-								out_AbsByte(0xFA);
+								out_AbsByte(0x3a);
 								out_RelWord(&$4);
 							}
 						}
@@ -1460,7 +1572,11 @@ z80_ret			:	T_Z80_RET
 ;
 
 z80_reti		:	T_Z80_RETI
-					{ out_AbsByte(0xD9); }
+					{
+						//out_AbsByte(0xD9);
+						out_AbsByte(0xed);
+						out_AbsByte(0x4e);
+					}
 ;
 
 z80_rl			:	T_Z80_RL reg_r
@@ -1535,7 +1651,10 @@ z80_srl			:	T_Z80_SRL reg_r
 ;
 
 z80_stop		:	T_Z80_STOP
-					{ out_AbsByte(0x10); out_AbsByte(0x00); }
+					{
+						yyerror("STOP is not a Z80 instruction");
+						//out_AbsByte(0x10); out_AbsByte(0x00);
+					}
 ;
 
 z80_sub			:	T_Z80_SUB op_a_n	{ out_AbsByte(0xD6); out_RelByte(&$2); }
@@ -1543,12 +1662,34 @@ z80_sub			:	T_Z80_SUB op_a_n	{ out_AbsByte(0xD6); out_RelByte(&$2); }
 ;
 
 z80_swap		:	T_Z80_SWAP reg_r
-					{ out_AbsByte(0xCB); out_AbsByte(0x30|$2); }
+					{
+						yyerror("SWAP is not a Z80 instruction");
+						//out_AbsByte(0xCB); out_AbsByte(0x30|$2);
+					}
 ;
 
 z80_xor			:	T_Z80_XOR op_a_n	{ out_AbsByte(0xEE); out_RelByte(&$2); }
 				|	T_Z80_XOR op_a_r	{ out_AbsByte(0xA8|$2); }
 ;
+
+z80_ldi			:	T_Z80_LDI	{ out_AbsByte(0xED); out_AbsByte(0xA0); };
+z80_cpi			:	T_Z80_CPI	{ out_AbsByte(0xED); out_AbsByte(0xA1); };
+z80_ini			:	T_Z80_INI	{ out_AbsByte(0xED); out_AbsByte(0xA2); };
+z80_oti			:	T_Z80_OTI	{ out_AbsByte(0xED); out_AbsByte(0xA3); };
+z80_ldd			:	T_Z80_LDD	{ out_AbsByte(0xED); out_AbsByte(0xA8); };
+z80_cpd			:	T_Z80_CPD	{ out_AbsByte(0xED); out_AbsByte(0xA9); };
+z80_ind			:	T_Z80_IND	{ out_AbsByte(0xED); out_AbsByte(0xAA); };
+z80_otd			:	T_Z80_OTD	{ out_AbsByte(0xED); out_AbsByte(0xAB); };
+z80_ldir		:	T_Z80_LDIR	{ out_AbsByte(0xED); out_AbsByte(0xB0); };
+z80_cpir		:	T_Z80_CPIR	{ out_AbsByte(0xED); out_AbsByte(0xB1); };
+z80_inir		:	T_Z80_INIR	{ out_AbsByte(0xED); out_AbsByte(0xB2); };
+z80_otir		:	T_Z80_OTIR	{ out_AbsByte(0xED); out_AbsByte(0xB3); };
+z80_lddr		:	T_Z80_LDDR	{ out_AbsByte(0xED); out_AbsByte(0xB8); };
+z80_cpdr		:	T_Z80_CPDR	{ out_AbsByte(0xED); out_AbsByte(0xB9); };
+z80_indr		:	T_Z80_INDR	{ out_AbsByte(0xED); out_AbsByte(0xBA); };
+z80_otdr		:	T_Z80_OTDR	{ out_AbsByte(0xED); out_AbsByte(0xBB); };
+z80_retn		:	T_Z80_RETN	{ out_AbsByte(0xED); out_AbsByte(0x45); };
+
 
 op_mem_ind		:	'[' const_16bit ']'	{ $$ = $2; }
 ;

@@ -45,6 +45,27 @@ struct sLexInitString localstrings[] = {
 	{"rst", T_Z80_RST},
 	{"sbc", T_Z80_SBC},
 	{"scf", T_Z80_SCF},
+	
+	{"in", T_Z80_IN},
+	{"out", T_Z80_OUT},
+	{"im", T_Z80_OUT},
+//	{"ldi", T_Z80_LDI},
+	{"cpi", T_Z80_CPI},
+	{"ini", T_Z80_INI},
+	{"oti", T_Z80_OTI},
+//	{"ldd", T_Z80_LDD},
+	{"cpd", T_Z80_CPD},
+	{"ind", T_Z80_IND},
+	{"otd", T_Z80_OTD},
+	{"ldir", T_Z80_LDIR},
+	{"cpir", T_Z80_CPIR},
+	{"inir", T_Z80_INIR},
+	{"otir", T_Z80_OTIR},
+	{"lddr", T_Z80_LDDR},
+	{"cpdr", T_Z80_CPDR},
+	{"indr", T_Z80_INDR},
+	{"otdr", T_Z80_OTDR},
+	{"retn", T_Z80_RETN},
 
 	/* Handled by globallex.c */
 	/* { "set", T_POP_SET }, */
