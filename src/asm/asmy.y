@@ -1467,11 +1467,11 @@ z80_ld_cind		:	T_Z80_LD T_MODE_C_IND comma T_MODE_A
 
 z80_ld_rr		:	T_Z80_LD reg_rr comma T_MODE_A
 					{ 
-						if ($2==T_MODE_HL_INDINC) { // ld [hli], a 
-							out_AbsByte(0x77); // ld a, [hl]
+						if ($2==REG_HL_INDINC) { // ld [hli], a 
+							out_AbsByte(0x77); // ld [hl], a
 							out_AbsByte(0x23); // inc hl
-						} else if ($2==T_MODE_HL_INDDEC) {
-							out_AbsByte(0x77); // ld a, [hl]
+						} else if ($2==REG_HL_INDDEC {
+							out_AbsByte(0x77); // ld [hl], a
 							out_AbsByte(0x2b); // dec hl
 						} else {
 							out_AbsByte(0x02|($2<<4));
@@ -1504,10 +1504,10 @@ z80_ld_a		:	T_Z80_LD reg_r comma T_MODE_C_IND
 				|	T_Z80_LD reg_r comma reg_rr
 					{
 						if( $2==REG_A ) {
-							if ($4==T_MODE_HL_INDINC) { // ld a, [hli]
+							if ($4==REG_HL_INDINC) { // ld a, [hli]
 								out_AbsByte(0x7e); // ld a, [hl]
 								out_AbsByte(0x23); // inc hl
-							} else if ($4==T_MODE_HL_INDDEC) {
+							} else if ($4==REG_HL_INDDEC) {
 								out_AbsByte(0x7e); // ld a, [hl]
 								out_AbsByte(0x2b); // dec hl
 							} else {
