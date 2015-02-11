@@ -503,6 +503,7 @@ void	if_skip_to_endc( void )
 %token	T_MODE_DE T_MODE_DE_IND
 %token	T_MODE_SP T_MODE_SP_IND
 %token	T_MODE_HL T_MODE_HL_IND T_MODE_HL_INDDEC T_MODE_HL_INDINC
+%token T_MODE_R
 %token	T_CC_NZ T_CC_Z T_CC_NC
 
 %type	<nConstValue>	reg_r
@@ -1532,6 +1533,18 @@ z80_ld_a		:	T_Z80_LD reg_r comma T_MODE_C_IND
 								out_AbsByte(0x3a);
 								out_RelWord(&$4);
 							}
+						}
+						else
+						{
+							yyerror("Destination operand must be A");
+						}
+					}
+				|	T_Z80_LD reg_r comma T_MODE_R
+					{
+						if( $2==REG_A )
+						{
+							out_AbsByte(0xed);
+							out_AbsByte(0x5f);
 						}
 						else
 						{

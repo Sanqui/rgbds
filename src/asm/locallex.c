@@ -104,6 +104,7 @@ struct sLexInitString localstrings[] = {
 	{"e", T_MODE_E},
 	{"h", T_MODE_H},
 	{"l", T_MODE_L},
+	{"r", T_MODE_R},
 
 	{NULL, 0}
 };
