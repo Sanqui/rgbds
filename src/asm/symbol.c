@@ -753,6 +753,8 @@ sym_PrepPass2(void)
 	p_NARGSymbol->Callback = Callback_NARG;
 	
 	math_DefinePI();
+
+	sym_AddEqu("_Z80", 1);
 }
 
 /*
