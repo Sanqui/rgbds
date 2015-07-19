@@ -322,6 +322,31 @@ sym_GetArrayValue(char *s, SLONG index)
 }
 
 /*
+ * Return an array's length
+ */
+ULONG 
+sym_GetArrayLength(char *s) {
+	struct sSymbol *psym, *pscope;
+
+	if (*s == '.')
+		pscope = pScope;
+	else
+		pscope = NULL;
+
+	if ((psym = findsymbol(s, pscope)) != NULL) {
+		if (psym->nType & SYMF_ARRAY) {
+		    return psym->nValue;
+        }
+		else {
+			fatalerror("Expression must be array");
+		}
+	} else {
+		yyerror("'%s' not defined", s);
+	}
+	return -1;
+}
+
+/*
  * Return a symbols value... "estimated" if not defined yet
  */
 ULONG 

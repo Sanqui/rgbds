@@ -422,6 +422,8 @@ void	if_skip_to_endc( void )
 %left	T_OP_STRUPR
 %left	T_OP_STRLWR
 
+%left	T_OP_LEN
+
 %left	NEG     /* negation--unary minus */
 
 %token	<tzSym> T_LABEL
@@ -854,6 +856,13 @@ constlist_8bit	:	constlist_8bit_entry
 constlist_8bit_entry	:               { out_Skip( 1 ); }
 						|	const_8bit	{ out_RelByte( &$1 ); }
 			   			|	string		{ char *s; int length; s = $1; length = charmap_Convert(&s); out_AbsByteGroup(s, length); free(s); }
+			   			|	T_OP_MUL T_ID
+			   				{
+			   					int length = sym_GetArrayLength($2);
+			   					for (int i=0; i<length; i++) {
+			   						out_AbsByte(sym_GetArrayValue($2, i));
+			   					}
+			   				}
 ;
 
 constlist_16bit	:	constlist_16bit_entry
@@ -862,6 +871,13 @@ constlist_16bit	:	constlist_16bit_entry
 
 constlist_16bit_entry	:  				{ out_Skip( 2 ); }
 						|	const_16bit	{ out_RelWord( &$1 ); }
+			   			|	T_OP_MUL T_ID
+			   				{
+			   					int length = sym_GetArrayLength($2);
+			   					for (int i=0; i<length; i++) {
+			   						out_AbsWord(sym_GetArrayValue($2, i));
+			   					}
+			   				}
 ;
 
 
@@ -985,6 +1001,7 @@ relocconst		:	T_ID
 						}
 					}
 				|	T_OP_STRLEN '(' string ')'		{ rpn_Number(&$$,strlen($3)); }
+				|	T_OP_LEN '(' T_ID ')'		{ rpn_Number(&$$,sym_GetArrayLength($3)); }
 				|	'(' relocconst ')'
 						{ $$ = $2; }
 ;
@@ -1051,6 +1068,7 @@ const			:	T_ID							{ $$ = sym_GetConstantValue($1); }
 						}
 					}
 				|	T_OP_STRLEN '(' string ')'		{ $$ = strlen($3); }
+				|	T_OP_LEN '(' T_ID ')'		{ $$ = sym_GetArrayLength($3); }
 				|	'(' const ')'					{ $$ = $2; }
 ;
 

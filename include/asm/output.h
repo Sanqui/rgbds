@@ -23,6 +23,7 @@ void out_NewAbsSection(char *pzName, ULONG secttype, SLONG org, SLONG bank);
 void out_AbsByte(int b);
 void out_AbsByteGroup(char *s, int length);
 void out_RelByte(struct Expression * expr);
+void out_AbsWord(int w);
 void out_RelWord(struct Expression * expr);
 void out_PCRelByte(struct Expression * expr);
 void out_WriteObject(void);

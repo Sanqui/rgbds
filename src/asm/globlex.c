@@ -360,6 +360,8 @@ struct sLexInitString staticstrings[] = {
 	{"popo", T_POP_POPO},
 
 	{"opt", T_POP_OPT},
+	
+	{"len", T_OP_LEN},
 
 	{NULL, 0}
 };

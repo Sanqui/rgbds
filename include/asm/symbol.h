@@ -65,6 +65,7 @@ void sym_AddSet(char *tzSym, SLONG value);
 void sym_Init(void);
 ULONG sym_GetConstantValue(char *s);
 ULONG sym_GetArrayValue(char *s, SLONG index);
+ULONG sym_GetArrayLength(char *s);
 void sym_Import(char *tzSym);
 ULONG sym_isConstant(char *s);
 struct sSymbol *sym_FindSymbol(char *tzName);
