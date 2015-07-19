@@ -2,9 +2,15 @@ SECTION "0",HOME[0]
 
 
 FIVE EQU 5
-TEST ARRAY [0, 1, 2, $33, 4, FIVE]
+TEST ARRAY [0, 1, 2, $33, 4, FIVE, 6, 7]
 
+TEST[0] = $55
+
+db TEST[0]
 db TEST[2+1]
 db LEN(TEST)
 db *TEST
 dw *TEST
+
+TEST APPEND $99
+db TEST[LEN(TEST)-1]
