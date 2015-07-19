@@ -421,6 +421,7 @@ void	if_skip_to_endc( void )
 %left	T_OP_STRCAT
 %left	T_OP_STRUPR
 %left	T_OP_STRLWR
+%left	T_OP_STRMAP
 
 %left	T_OP_LEN
 
@@ -1108,6 +1109,17 @@ string			:	T_STRING
 					{ strcpy($$,$3); strupr($$); }
 				|	T_OP_STRLWR '(' string ')'
 					{ strcpy($$,$3); strlwr($$); }
+				|	T_OP_STRMAP '(' string ')'
+					{
+						char *s; int length; s = $3;
+						length = charmap_Convert(&s);
+						if (length > 256) {
+							fatalerror("Converted string is over 256 bytes long");
+						}
+						s[length-1] = '\0';
+						strcpy($$,s);
+						free(s);
+					}
    				|	T_OP_MUL T_ID '[' const ']'
    					{
    						strcpy($$, sym_GetArrayString($2, $4));

@@ -288,6 +288,7 @@ struct sLexInitString staticstrings[] = {
 	{"strcat", T_OP_STRCAT},
 	{"strupr", T_OP_STRUPR},
 	{"strlwr", T_OP_STRLWR},
+	{"strmap", T_OP_STRMAP},
 
 	{"include", T_POP_INCLUDE},
 	{"printt", T_POP_PRINTT},
