@@ -349,6 +349,7 @@ struct sLexInitString staticstrings[] = {
 #endif
 	{"equ", T_POP_EQU},
 	{"equs", T_POP_EQUS},
+	{"array", T_POP_ARRAY},
 
 	{"set", T_POP_SET},
 	{"=", T_POP_SET},

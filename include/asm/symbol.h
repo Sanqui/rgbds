@@ -16,6 +16,7 @@ struct sSymbol {
 	ULONG ulMacroSize;
 	char *pMacro;
 	     SLONG(*Callback) (struct sSymbol *);
+    struct sArrayValue *pValues;
 };
 #define SYMF_RELOC		0x001	/* symbol will be reloc'ed during
 					 * linking, it's absolute value is
@@ -34,6 +35,13 @@ struct sSymbol {
 #define SYMF_STRING		0x100	/* symbol is a stringsymbol */
 #define SYMF_CONST		0x200	/* symbol has a constant value, will
 					 * not be changed during linking */
+#define SYMF_ARRAY		0x400  /* symbol is an array, has values */
+
+struct sArrayValue {
+	SLONG nValue;
+	ULONG nType;
+	struct sArrayValue *pValues;
+};
 
 ULONG calchash(char *s);
 void sym_PrepPass1(void);
@@ -50,9 +58,13 @@ void sym_RestoreCurrentMacroArgs(char *save[]);
 void sym_UseNewMacroArgs(void);
 void sym_FreeCurrentMacroArgs(void);
 void sym_AddEqu(char *tzSym, SLONG value);
+void sym_AddArray(char *tzSym);
+void sym_ArrayAppend(SLONG value);
+void sym_DoneArray();
 void sym_AddSet(char *tzSym, SLONG value);
 void sym_Init(void);
 ULONG sym_GetConstantValue(char *s);
+ULONG sym_GetArrayValue(char *s, SLONG index);
 void sym_Import(char *tzSym);
 ULONG sym_isConstant(char *s);
 struct sSymbol *sym_FindSymbol(char *tzName);

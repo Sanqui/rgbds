@@ -17,6 +17,7 @@ struct sSymbol *tHashedSymbols[HASHSIZE];
 struct sSymbol *pScope = NULL;
 struct sSymbol *pPCSymbol = NULL;
 struct sSymbol *p_NARGSymbol = NULL;
+struct sSymbol *pCurrentArray = NULL;
 char *currentmacroargs[MAXMACROARGS + 1];
 char *newmacroargs[MAXMACROARGS + 1];
 char SavedTIME[256];
@@ -83,6 +84,7 @@ createsymbol(char *s)
 		(*ppsym)->pMacro = NULL;
 		(*ppsym)->pSection = NULL;
 		(*ppsym)->Callback = NULL;
+		(*ppsym)->pValues = NULL;
 		return (*ppsym);
 	} else {
 		fatalerror("No memory for symbol");
@@ -280,6 +282,37 @@ sym_GetConstantValue(char *s)
 			return (getvaluefield(psym));
 		else {
 			fatalerror("Expression must have a constant value");
+		}
+	} else {
+		yyerror("'%s' not defined", s);
+	}
+
+	return (0);
+}
+
+/*
+ * Return an array's value at index
+ */
+ULONG 
+sym_GetArrayValue(char *s, SLONG index)
+{
+	struct sSymbol *psym, *pscope;
+
+	if (*s == '.')
+		pscope = pScope;
+	else
+		pscope = NULL;
+
+	if ((psym = findsymbol(s, pscope)) != NULL) {
+		if (psym->nType & SYMF_CONST && psym->nType & SYMF_ARRAY) {
+		    if (index >= 0 && index < psym->nValue) {
+		        return psym->pValues[index].nValue;
+		    } else {
+		        yyerror("%s[%d] out of range", s, index);
+		    }
+        }
+		else {
+			fatalerror("Expression must be constant array");
 		}
 	} else {
 		yyerror("'%s' not defined", s);
@@ -531,6 +564,53 @@ sym_isString(char *tzSym)
 			return (1);
 	}
 	return (0);
+}
+
+void
+sym_AddArray(char *tzSym)
+{
+	if ((nPass == 1)
+	    || ((nPass == 2) && (sym_isDefined(tzSym) == 0))) {
+		/* only add equated symbols in pass 1 */
+		struct sSymbol *nsym;
+
+		if ((nsym = findsymbol(tzSym, NULL)) != NULL) {
+			if (nsym->nType & SYMF_DEFINED) {
+				yyerror("'%s' already defined", tzSym);
+			}
+		} else
+			nsym = createsymbol(tzSym);
+
+		if (nsym) {
+			nsym->nValue = 0;
+			nsym->nType |= SYMF_ARRAY | SYMF_EQU | SYMF_DEFINED | SYMF_CONST;
+			nsym->pScope = NULL;
+		}
+		pCurrentArray = nsym;
+	}
+}
+
+void
+sym_ArrayAppend(SLONG value)
+{
+    assert(pCurrentArray != NULL);
+    pCurrentArray->nValue++;
+    pCurrentArray->pValues = realloc(pCurrentArray->pValues,
+        sizeof(struct sArrayValue)*pCurrentArray->nValue);
+    if (pCurrentArray->pValues == NULL) {
+        fatalerror("No memory for array value");
+    }
+    
+    struct sArrayValue *pval = &(pCurrentArray->pValues[pCurrentArray->nValue-1]);
+    pval->nValue = value;
+	pval->nType = SYMF_EQU | SYMF_DEFINED | SYMF_CONST;
+    pval->pValues = NULL;
+}
+
+void
+sym_DoneArray()
+{
+    pCurrentArray = NULL;
 }
 
 /*

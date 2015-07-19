@@ -1,0 +1,11 @@
+SECTION "0",HOME[0]
+
+
+FIVE EQU 5
+TEST ARRAY [0, 1, 2, $33, 4, FIVE]
+
+db 1
+db TEST[2+1]
+db 1
+db TEST
+db 1

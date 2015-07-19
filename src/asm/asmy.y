@@ -429,6 +429,7 @@ void	if_skip_to_endc( void )
 %token	<tzSym> T_POP_EQU
 %token	<tzSym> T_POP_SET
 %token	<tzSym> T_POP_EQUS
+%token	<tzSym> T_POP_ARRAY
 
 %token	T_POP_INCLUDE T_POP_PRINTF T_POP_PRINTT T_POP_PRINTV T_POP_IF T_POP_ELSE T_POP_ENDC
 %token	T_POP_IMPORT T_POP_EXPORT T_POP_GLOBAL
@@ -558,6 +559,7 @@ pseudoop : equ
 	| rw
 	| rl
 	| equs
+	| array
 	| macrodef;
 
 simple_pseudoop	:	include
@@ -746,6 +748,20 @@ set				:	T_LABEL T_POP_SET const
 					{ sym_AddSet( $1, $3 ); }
 ;
 
+array			:	T_LABEL T_POP_ARRAY '['
+					{ sym_AddArray( $1 ); }
+					array_list ']'
+					{ sym_DoneArray(); }
+;
+
+array_list		:	array_entry
+				|	array_entry ',' array_list
+;
+
+array_entry		:	const
+					{ sym_ArrayAppend($1); }
+;
+
 include			:	T_POP_INCLUDE string
 					{
 						fstk_RunInclude($2);
@@ -889,6 +905,8 @@ const_16bit		:	relocconst
 
 relocconst		:	T_ID
 						{ rpn_Symbol(&$$,$1);	$$.nVal = sym_GetValue($1); }
+				|	T_ID '[' const ']'
+						{ rpn_Number(&$$, sym_GetArrayValue($1, $3)); }
 				|	T_NUMBER
 						{ rpn_Number(&$$,$1);	$$.nVal = $1; }
 				|	string
@@ -972,6 +990,7 @@ relocconst		:	T_ID
 ;
 
 const			:	T_ID							{ $$ = sym_GetConstantValue($1); }
+				|	T_ID '[' const ']'				{ $$ = sym_GetArrayValue($1, $3); }
 				|	T_NUMBER 						{ $$ = $1; }
 				|	string						{ $$ = str2int($1); }
 				|	T_OP_LOGICNOT const %prec NEG	{ $$ = !$2; }
