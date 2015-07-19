@@ -432,6 +432,7 @@ void	if_skip_to_endc( void )
 %token	<tzSym> T_POP_SET
 %token	<tzSym> T_POP_EQUS
 %token	<tzSym> T_POP_ARRAY
+%token	<tzSym> T_POP_APPEND
 
 %token	T_POP_INCLUDE T_POP_PRINTF T_POP_PRINTT T_POP_PRINTV T_POP_IF T_POP_ELSE T_POP_ENDC
 %token	T_POP_IMPORT T_POP_EXPORT T_POP_GLOBAL
@@ -562,6 +563,7 @@ pseudoop : equ
 	| rl
 	| equs
 	| array
+	| append
 	| macrodef;
 
 simple_pseudoop	:	include
@@ -748,6 +750,8 @@ equ				:	T_LABEL T_POP_EQU const
 
 set				:	T_LABEL T_POP_SET const
 					{ sym_AddSet( $1, $3 ); }
+				|	T_LABEL '[' const ']' T_POP_SET const
+					{ sym_ArraySet($1, $3, $6); }
 ;
 
 array			:	T_LABEL T_POP_ARRAY '['
@@ -760,8 +764,14 @@ array_list		:	array_entry
 				|	array_entry ',' array_list
 ;
 
-array_entry		:	const
-					{ sym_ArrayAppend($1); }
+array_entry		:	string
+					{ sym_CurArrayAppendString($1); }	
+				|	const
+					{ sym_CurArrayAppend($1); }
+;
+
+append			:	T_LABEL T_POP_APPEND const
+					{ sym_ArrayAppend($1, $3); }
 ;
 
 include			:	T_POP_INCLUDE string
@@ -863,6 +873,11 @@ constlist_8bit_entry	:               { out_Skip( 1 ); }
 			   						out_AbsByte(sym_GetArrayValue($2, i));
 			   					}
 			   				}
+		   				|	T_OP_MUL T_ID '[' const ']'
+		   					{
+		   						char *s; int length; s = sym_GetArrayString($2, $4);
+		   						length = charmap_Convert(&s); out_AbsByteGroup(s, length); free(s);
+	   						}
 ;
 
 constlist_16bit	:	constlist_16bit_entry

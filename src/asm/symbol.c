@@ -306,7 +306,46 @@ sym_GetArrayValue(char *s, SLONG index)
 	if ((psym = findsymbol(s, pscope)) != NULL) {
 		if (psym->nType & SYMF_CONST && psym->nType & SYMF_ARRAY) {
 		    if (index >= 0 && index < psym->nValue) {
-		        return psym->pValues[index].nValue;
+		        if (!(psym->pValues[index].nType & SYMF_STRING)) {
+    		        return psym->pValues[index].nValue;
+		        } else {
+		            yyerror("%s[%d] is a string, cannot use as value (expand with *)", s, index);
+		        }
+		    } else {
+		        yyerror("%s[%d] out of range", s, index);
+		    }
+        }
+		else {
+			fatalerror("Expression must be constant array");
+		}
+	} else {
+		yyerror("'%s' not defined", s);
+	}
+
+	return (0);
+}
+
+/*
+ * Return an array's string at index
+ */
+char* 
+sym_GetArrayString(char *s, SLONG index)
+{
+	struct sSymbol *psym, *pscope;
+
+	if (*s == '.')
+		pscope = pScope;
+	else
+		pscope = NULL;
+
+	if ((psym = findsymbol(s, pscope)) != NULL) {
+		if (psym->nType & SYMF_CONST && psym->nType & SYMF_ARRAY) {
+		    if (index >= 0 && index < psym->nValue) {
+		        if (psym->pValues[index].nType & SYMF_STRING) {
+    		        return psym->pValues[index].pMacro;
+		        } else {
+		            yyerror("%s[%d] is not a string, cannot expand", s, index);
+		        }
 		    } else {
 		        yyerror("%s[%d] out of range", s, index);
 		    }
@@ -619,7 +658,7 @@ sym_AddArray(char *tzSym)
 }
 
 void
-sym_ArrayAppend(SLONG value)
+sym_CurArrayAppend(SLONG value)
 {
     assert(pCurrentArray != NULL);
     pCurrentArray->nValue++;
@@ -631,7 +670,67 @@ sym_ArrayAppend(SLONG value)
     
     struct sArrayValue *pval = &(pCurrentArray->pValues[pCurrentArray->nValue-1]);
     pval->nValue = value;
-	pval->nType = SYMF_EQU | SYMF_DEFINED | SYMF_CONST;
+	pval->nType = SYMF_SET | SYMF_DEFINED | SYMF_CONST;
+    pval->pValues = NULL;
+}
+
+void
+sym_CurArrayAppendString(char *tzValue)
+{
+    assert(pCurrentArray != NULL);
+    pCurrentArray->nValue++;
+    pCurrentArray->pValues = realloc(pCurrentArray->pValues,
+        sizeof(struct sArrayValue)*pCurrentArray->nValue);
+    if (pCurrentArray->pValues == NULL) {
+        fatalerror("No memory for array value");
+    }
+    struct sArrayValue *pval = &(pCurrentArray->pValues[pCurrentArray->nValue-1]);
+	if ((pval->pMacro = malloc(strlen(tzValue) + 1)) != NULL)
+		strcpy(pval->pMacro, tzValue);
+	else
+		fatalerror("No memory for array value string");
+    pval->nValue = strlen(tzValue);
+	pval->nType = SYMF_STRING | SYMF_DEFINED;
+}
+
+void
+sym_ArrayAppend(char *tzSym, SLONG value)
+{
+    sym_ArraySet(tzSym, sym_GetArrayLength(tzSym), value);
+}
+
+
+void
+sym_ArraySet(char *tzSym, SLONG index, SLONG value)
+{
+	struct sSymbol *nsym;
+
+	if ((nsym = findsymbol(tzSym, NULL)) == NULL) {
+	    yyerror("'%s' not defined", tzSym);
+        return;
+    }
+    
+    if (!(nsym->nType & SYMF_ARRAY)) {
+        yyerror("'%s' is not an array", tzSym);
+        return;
+    }
+    
+    if (index > nsym->nValue) {
+        yyerror("%s[%d] index out of range (array length is %d)", tzSym, index, nsym->nValue);
+        return;
+    }
+    else if (index == nsym->nValue) {
+        nsym->nValue++;
+        nsym->pValues = realloc(nsym->pValues,
+            sizeof(struct sArrayValue)*nsym->nValue);
+        if (nsym->pValues == NULL) {
+            fatalerror("No memory for array value");
+        }
+    }
+    
+    struct sArrayValue *pval = &(nsym->pValues[index]);
+    pval->nValue = value;
+	pval->nType = SYMF_SET | SYMF_DEFINED | SYMF_CONST;
     pval->pValues = NULL;
 }
 

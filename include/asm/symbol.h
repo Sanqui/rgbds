@@ -40,6 +40,7 @@ struct sSymbol {
 struct sArrayValue {
 	SLONG nValue;
 	ULONG nType;
+	char *pMacro;
 	struct sArrayValue *pValues;
 };
 
@@ -59,12 +60,16 @@ void sym_UseNewMacroArgs(void);
 void sym_FreeCurrentMacroArgs(void);
 void sym_AddEqu(char *tzSym, SLONG value);
 void sym_AddArray(char *tzSym);
-void sym_ArrayAppend(SLONG value);
+void sym_CurArrayAppend(SLONG value);
+void sym_CurArrayAppendString(char *tzValue);
+void sym_ArrayAppend(char *tzSym, SLONG value);
+void sym_ArraySet(char *tzSym, SLONG index, SLONG value);
 void sym_DoneArray();
 void sym_AddSet(char *tzSym, SLONG value);
 void sym_Init(void);
 ULONG sym_GetConstantValue(char *s);
 ULONG sym_GetArrayValue(char *s, SLONG index);
+char* sym_GetArrayString(char *s, SLONG index);
 ULONG sym_GetArrayLength(char *s);
 void sym_Import(char *tzSym);
 ULONG sym_isConstant(char *s);

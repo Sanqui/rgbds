@@ -353,6 +353,8 @@ struct sLexInitString staticstrings[] = {
 
 	{"set", T_POP_SET},
 	{"=", T_POP_SET},
+	
+	{"append", T_POP_APPEND},
 
 	{"pushs", T_POP_PUSHS},
 	{"pops", T_POP_POPS},
