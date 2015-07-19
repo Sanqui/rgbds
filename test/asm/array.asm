@@ -3,10 +3,12 @@ SECTION "0",HOME[0]
 
 FIVE        EQU 5
 TEST        ARRAY [0, 1, 2, $33, 4, FIVE, 6, 7]
-STRINGS     ARRAY ["hello", 
+STRINGS     ARRAY [
+    "hello", 
     "hi", 
-    "heyo", 
-    "howdy"]
+    "heyo",  ; comment!
+    "howdy"
+]
 
 TEST[0] = $55
 

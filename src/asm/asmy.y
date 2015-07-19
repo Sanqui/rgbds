@@ -760,10 +760,19 @@ array			:	T_LABEL T_POP_ARRAY '['
 					{ sym_DoneArray(); }
 ;
 
+/* This is a little wordy but gotta cover all bases here */
 array_list		:	array_entry
-				|	array_entry ',' array_list
-				|	array_entry ',' '\n' array_list
+				|	'\n' array_entry
 					{ nLineNo++; }
+				|	'\n' array_entry '\n'
+					{ nLineNo+=2; }
+				|	array_entry ',' array_list
+				|	'\n' array_entry ',' array_list
+					{ nLineNo++; }
+				|	array_entry ',' array_list '\n'
+					{ nLineNo++; }
+				|	'\n' array_entry ',' array_list '\n'
+					{ nLineNo+=2; }
 ;
 
 array_entry		:	string
