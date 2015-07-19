@@ -5,7 +5,6 @@ FIVE EQU 5
 TEST ARRAY [0, 1, 2, $33, 4, FIVE]
 
 db TEST[2+1]
-db TEST
 db LEN(TEST)
 db *TEST
 dw *TEST

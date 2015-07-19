@@ -364,6 +364,9 @@ sym_GetValue(char *s)
 			if (psym->nType & (SYMF_MACRO | SYMF_STRING)) {
 				yyerror("'%s' is a macro or string symbol", s);
 			}
+			if (psym->nType & SYMF_ARRAY) {
+				yyerror("'%s' is an array symbol; index it, use LEN(), or expand it with *", s, s);
+            }
 			return (getvaluefield(psym));
 		} else {
 			if (nPass == 2) {
@@ -729,8 +732,12 @@ sym_Export(char *tzSym)
 		if ((nsym = findsymbol(tzSym, 0)) == NULL)
 			nsym = createsymbol(tzSym);
 
-		if (nsym)
+		if (nsym) {
+		    if (nsym->nType & SYMF_ARRAY) {
+		        fatalerror("Arrays cannot be exported");
+		    }
 			nsym->nType |= SYMF_EXPORT;
+		}
 	} else {
 		struct sSymbol *nsym;
 
