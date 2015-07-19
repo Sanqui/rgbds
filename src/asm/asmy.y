@@ -1108,6 +1108,10 @@ string			:	T_STRING
 					{ strcpy($$,$3); strupr($$); }
 				|	T_OP_STRLWR '(' string ')'
 					{ strcpy($$,$3); strlwr($$); }
+   				|	T_OP_MUL T_ID '[' const ']'
+   					{
+   						strcpy($$, sym_GetArrayString($2, $4));
+					}
 ;
 section:
 		T_POP_SECTION string ',' sectiontype

@@ -19,6 +19,7 @@ db *TEST            ; 0, 1, 2, $33, 4, 5, 6, 7
 dw *TEST            ; same but words
 
 db *STRINGS[0]      ; "hello"
+db STRLEN(*STRINGS[0]) ; 5
 
 TEST APPEND $99
 db TEST[LEN(TEST)-1]    ; $99
