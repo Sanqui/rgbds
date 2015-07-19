@@ -3,7 +3,10 @@ SECTION "0",HOME[0]
 
 FIVE        EQU 5
 TEST        ARRAY [0, 1, 2, $33, 4, FIVE, 6, 7]
-STRINGS     ARRAY ["hello", "hi", "heyo"]
+STRINGS     ARRAY ["hello", 
+    "hi", 
+    "heyo", 
+    "howdy"]
 
 TEST[0] = $55
 
@@ -17,3 +20,4 @@ db *STRINGS[0]      ; "hello"
 
 TEST APPEND $99
 db TEST[LEN(TEST)-1]    ; $99
+

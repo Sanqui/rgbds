@@ -762,6 +762,8 @@ array			:	T_LABEL T_POP_ARRAY '['
 
 array_list		:	array_entry
 				|	array_entry ',' array_list
+				|	array_entry ',' '\n' array_list
+					{ nLineNo++; }
 ;
 
 array_entry		:	string
