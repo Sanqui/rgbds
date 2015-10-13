@@ -302,7 +302,7 @@ main(int argc, char *argv[])
 
 	newopt = CurrentOptions;
 
-	while ((ch = getopt(argc, argv, "b:D:g:hi:o:p:v:E")) != -1) {
+	while ((ch = getopt(argc, argv, "b:D:g:hiE:o:p:v")) != -1) {
 		switch (ch) {
 		case 'b':
 			if (strlen(optarg) == 2) {
@@ -333,6 +333,9 @@ main(int argc, char *argv[])
 		case 'i':
 			fstk_AddIncludePath(optarg);
 			break;
+		case 'E':
+			newopt.exportall = true;
+			break;
 		case 'o':
 			out_SetFileName(optarg);
 			break;
@@ -348,9 +351,6 @@ main(int argc, char *argv[])
 			break;
 		case 'v':
 			newopt.verbose = true;
-			break;
-		case 'E':
-			newopt.exportall = true;
 			break;
 		default:
 			usage();
