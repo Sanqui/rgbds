@@ -474,6 +474,7 @@ setuplex(void)
 	lex_FloatAddSecondRange(id, '\\', '\\');
 	lex_FloatAddSecondRange(id, '@', '@');
 	lex_FloatAddSecondRange(id, '#', '#');
+	lex_FloatAddRange(id, '.', '.');
 	lex_FloatAddRange(id, 'a', 'z');
 	lex_FloatAddRange(id, 'A', 'Z');
 	lex_FloatAddRange(id, '0', '9');
