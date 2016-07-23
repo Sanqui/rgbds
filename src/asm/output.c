@@ -202,26 +202,69 @@ void
 writesection(struct Section * pSect, FILE * f)
 {
 	//printf("SECTION: %s, ID: %d\n", pSect->pzName, getsectid(pSect));
+	
+	if (!pSect->oCopy) {
+		fputlong(pSect->nPC, f);
+		fputc(pSect->nType, f);
+		fputlong(pSect->nOrg, f);
+		//RGB1 addition
 
-	fputlong(pSect->nPC, f);
-	fputc(pSect->nType, f);
-	fputlong(pSect->nOrg, f);
-	//RGB1 addition
+		fputlong(pSect->nBank, f);
+		//RGB1 addition
 
-	    fputlong(pSect->nBank, f);
-	//RGB1 addition
+		if ((pSect->nType == SECT_ROM0)
+		    || (pSect->nType == SECT_ROMX)) {
+			struct Patch *pPatch;
 
-	    if ((pSect->nType == SECT_ROM0)
-	    || (pSect->nType == SECT_ROMX)) {
-		struct Patch *pPatch;
+			fwrite(pSect->tData, 1, pSect->nPC, f);
+			fputlong(countpatches(pSect), f);
 
-		fwrite(pSect->tData, 1, pSect->nPC, f);
-		fputlong(countpatches(pSect), f);
+			pPatch = pSect->pPatches;
+			while (pPatch) {
+				writepatch(pPatch, f);
+				pPatch = pPatch->pNext;
+			}
+		}
+	} else {
+		// This section is a carbon copy of another section with the same name.
+		struct Section* pSourceSect;
+		
+		pSourceSect = pSectionList;
+		while (pSourceSect) {
+			if (!pSourceSect->oCopy &&
+			    strcmp(pSect->pzName, pSourceSect->pzName) == 0) {
+			    break;
+			}
+			pSourceSect = pSourceSect->pNext;
+		}
+		if (!pSourceSect) {
+			fatalerror("Cannot make a copy of the section \"%s\" as \
+no such section exists", pSect->pzName);
+		}
+		
+		// length comes from source section,
+		// position from this (copied) section
+		
+		fputlong(pSourceSect->nPC, f);
+		fputc(pSect->nType, f);
+		fputlong(pSect->nOrg, f);
+		fputlong(pSect->nBank, f);
+		
+		// the rest of the data, including patches,
+		// comes from the source section
+		
+		if ((pSect->nType == SECT_ROM0)
+		    || (pSect->nType == SECT_ROMX)) {
+			struct Patch *pPatch;
 
-		pPatch = pSect->pPatches;
-		while (pPatch) {
-			writepatch(pPatch, f);
-			pPatch = pPatch->pNext;
+			fwrite(pSourceSect->tData, 1, pSourceSect->nPC, f);
+			fputlong(countpatches(pSourceSect), f);
+
+			pPatch = pSourceSect->pPatches;
+			while (pPatch) {
+				writepatch(pPatch, f);
+				pPatch = pPatch->pNext;
+			}
 		}
 	}
 }
@@ -547,7 +590,7 @@ out_SetFileName(char *s)
  * Find a section by name and type.  If it doesn't exist, create it
  */
 struct Section *
-out_FindSection(char *pzName, ULONG secttype, SLONG org, SLONG bank)
+out_FindSection(char *pzName, ULONG secttype, SLONG org, SLONG bank, BBOOL copy)
 {
 	struct Section *pSect, **ppSect;
 
@@ -555,14 +598,17 @@ out_FindSection(char *pzName, ULONG secttype, SLONG org, SLONG bank)
 	pSect = pSectionList;
 
 	while (pSect) {
-		if (strcmp(pzName, pSect->pzName) == 0) {
-			if (secttype == pSect->nType
-			    && ((ULONG) org) == pSect->nOrg
-			    && ((ULONG) bank) == pSect->nBank) {
-				return (pSect);
-			} else
-				fatalerror
-				    ("Section already exists but with a different type");
+		if (!copy) {
+			if (strcmp(pzName, pSect->pzName) == 0
+			    && !pSect->oCopy) {
+				if (secttype == pSect->nType
+					&& ((ULONG) org) == pSect->nOrg
+					&& ((ULONG) bank) == pSect->nBank) {
+					return (pSect);
+				} else
+					fatalerror
+						("Section already exists but with a different type");
+			}
 		}
 		ppSect = &(pSect->pNext);
 		pSect = pSect->pNext;
@@ -575,15 +621,21 @@ out_FindSection(char *pzName, ULONG secttype, SLONG org, SLONG bank)
 			pSect->nPC = 0;
 			pSect->nOrg = org;
 			pSect->nBank = bank;
+			pSect->oCopy = copy;
 			pSect->pNext = NULL;
 			pSect->pPatches = NULL;
 			pSect->charmap = NULL;
 			pPatchSymbols = NULL;
-
-			if ((pSect->tData = malloc(SECTIONCHUNK)) != NULL) {
-				return (pSect);
-			} else
-				fatalerror("Not enough memory for section");
+			
+			if (copy) {
+				pSect->tData = NULL;
+				return pSect;
+			} else {
+				if ((pSect->tData = malloc(SECTIONCHUNK)) != NULL) {
+					return (pSect);
+				} else
+					fatalerror("Not enough memory for section");
+			}
 		} else
 			fatalerror("Not enough memory for sectionname");
 	} else
@@ -611,7 +663,7 @@ out_SetCurrentSection(struct Section * pSect)
 void 
 out_NewSection(char *pzName, ULONG secttype)
 {
-	out_SetCurrentSection(out_FindSection(pzName, secttype, -1, -1));
+	out_SetCurrentSection(out_FindSection(pzName, secttype, -1, -1, 0));
 }
 
 /*
@@ -620,7 +672,19 @@ out_NewSection(char *pzName, ULONG secttype)
 void 
 out_NewAbsSection(char *pzName, ULONG secttype, SLONG org, SLONG bank)
 {
-	out_SetCurrentSection(out_FindSection(pzName, secttype, org, bank));
+	out_SetCurrentSection(out_FindSection(pzName, secttype, org, bank, 0));
+}
+
+/*
+ * Create a new section that's a carbon copy of another section of
+ * the same name.
+ * Does not reset the current section
+ */
+void
+out_NewCopySection(char *pzName, ULONG secttype, SLONG org, SLONG bank)
+{
+	if (nPass != 1) return;
+	out_FindSection(pzName, secttype, org, bank, 1);
 }
 
 /*

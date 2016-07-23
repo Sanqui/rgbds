@@ -20,8 +20,8 @@
 char	*tzNewMacro;
 ULONG	ulNewMacroSize;
 
-void
-bankrangecheck(char *name, ULONG secttype, SLONG org, SLONG bank)
+SLONG
+bankrangecheck(ULONG secttype, SLONG bank)
 {
 	SLONG minbank, maxbank;
 	char *stype;
@@ -59,8 +59,8 @@ bankrangecheck(char *name, ULONG secttype, SLONG org, SLONG bank)
 	if (secttype == SECT_WRAMX) {
 		bank -= minbank;
 	}
-
-	out_NewAbsSection(name, secttype, org, bank);
+	
+	return bank;
 }
 
 size_t symvaluetostring(char *dest, size_t maxLength, char *sym)
@@ -477,6 +477,7 @@ void	if_skip_to_endc( void )
 %token	T_POP_IMPORT T_POP_EXPORT T_POP_GLOBAL
 %token	T_POP_DB T_POP_DS T_POP_DW T_POP_DL
 %token	T_POP_SECTION
+%token	T_POP_COPYSETCION
 %token	T_POP_RB
 %token	T_POP_RW
 %token	T_POP_RL
@@ -612,6 +613,7 @@ simple_pseudoop	:	include
 				|	dl
 				|	ds
 				|	section
+				|	copysection
 				|	rsreset
 				|	rsset
 				|	incbin
@@ -1097,14 +1099,43 @@ section:
 		}
 	|	T_POP_SECTION string ',' sectiontype ',' T_OP_BANK '[' const ']'
 		{
-			bankrangecheck($2, $4, -1, $8);
+			SLONG bank = bankrangecheck($4, $8);
+        	out_NewAbsSection($2, $4, -1, bank);
 		}
 	|	T_POP_SECTION string ',' sectiontype '[' const ']' ',' T_OP_BANK '[' const ']'
 		{
 			if ($6 < 0 || $6 > 0x10000) {
 				yyerror("Address $%x not 16-bit", $6);
 			}
-			bankrangecheck($2, $4, $6, $11);
+			SLONG bank = bankrangecheck($4, $11);
+        	out_NewAbsSection($2, $4, $6, bank);
+		}
+;
+
+copysection:
+		T_POP_COPYSECTION string ',' sectiontype
+		{
+			out_NewCopySection($2,$4, -1, -1);
+		}
+	|	T_POP_COPYSECTION string ',' sectiontype '[' const ']'
+		{
+			if( $6>=0 && $6<0x10000 )
+				out_NewCopySection($2,$4,$6,-1);
+			else
+				yyerror("Address $%x not 16-bit", $6);
+		}
+	|	T_POP_COPYSECTION string ',' sectiontype ',' T_OP_BANK '[' const ']'
+		{
+			SLONG bank = bankrangecheck($4, $8);
+        	out_NewCopySection($2, $4, -1, bank);
+		}
+	|	T_POP_COPYSECTION string ',' sectiontype '[' const ']' ',' T_OP_BANK '[' const ']'
+		{
+			if ($6 < 0 || $6 > 0x10000) {
+				yyerror("Address $%x not 16-bit", $6);
+			}
+			SLONG bank = bankrangecheck($4, $11);
+        	out_NewCopySection($2, $4, $6, bank);
 		}
 ;
 
