@@ -257,7 +257,7 @@ static void
 usage(void)
 {
 	printf(
-"Usage: rgbasm [-hvE] [-b chars] [-Dname[=value]] [-g chars] [-i path]\n"
+"Usage: rgbasm [-hvEr] [-b chars] [-Dname[=value]] [-g chars] [-i path]\n"
 "              [-o outfile] [-p pad_value] file.asm\n");
 	exit(1);
 }
@@ -297,12 +297,13 @@ main(int argc, char *argv[])
 	DefaultOptions.verbose = false;
 	DefaultOptions.haltnop = true;
 	DefaultOptions.exportall = false;
+	DefaultOptions.allowramdata = false;
 
 	opt_SetCurrentOptions(&DefaultOptions);
 
 	newopt = CurrentOptions;
 
-	while ((ch = getopt(argc, argv, "b:D:g:hi:o:p:vE")) != -1) {
+	while ((ch = getopt(argc, argv, "b:D:g:hi:o:p:vEr")) != -1) {
 		switch (ch) {
 		case 'b':
 			if (strlen(optarg) == 2) {
@@ -351,6 +352,9 @@ main(int argc, char *argv[])
 			break;
 		case 'E':
 			newopt.exportall = true;
+			break;
+		case 'r':
+			newopt.allowramdata = true;
 			break;
 		default:
 			usage();

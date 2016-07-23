@@ -10,6 +10,7 @@ struct sOptions {
 	bool verbose;
 	bool haltnop;
 	bool exportall;
+	bool allowramdata;
 	    //-1 == random
 };
 

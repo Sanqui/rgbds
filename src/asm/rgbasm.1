@@ -6,7 +6,7 @@
 .Nd Game Boy assembler
 .Sh SYNOPSIS
 .Nm rgbasm
-.Op Fl hv
+.Op Fl hvEr
 .Op Fl b Ar chars
 .Op Fl D Ar name Ns Op = Ns Ar value
 .Op Fl g Ar chars
@@ -54,6 +54,8 @@ The default is 0x00.
 Be verbose.
 .It Fl E
 Export all relocable symbols by default.
+.It Fl r
+Allow code/data in RAM sections
 .El
 .Sh EXAMPLES
 Assembling a basic source file is simple:

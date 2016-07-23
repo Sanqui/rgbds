@@ -445,7 +445,8 @@ void
 checkcodesection(SLONG size)
 {
 	checksection();
-	if (pCurrentSection->nType != SECT_ROM0 &&
+	if (!CurrentOptions.allowramdata &&
+	    pCurrentSection->nType != SECT_ROM0 &&
 	    pCurrentSection->nType != SECT_ROMX) {
 		errx(1, "Section '%s' cannot contain code or data (not a "
 		    "ROM0 or ROMX)", pCurrentSection->pzName);
