@@ -17,7 +17,7 @@ bool oDontExpandStrings = false;
 SLONG nGBGfxID = -1;
 SLONG nBinaryID = -1;
 
-SLONG 
+SLONG
 gbgfx2bin(char ch)
 {
 	SLONG i;
@@ -31,7 +31,7 @@ gbgfx2bin(char ch)
 	return (0);
 }
 
-SLONG 
+SLONG
 binary2bin(char ch)
 {
 	SLONG i;
@@ -45,7 +45,7 @@ binary2bin(char ch)
 	return (0);
 }
 
-SLONG 
+SLONG
 char2bin(char ch)
 {
 	if (ch >= 'a' && ch <= 'f')
@@ -62,7 +62,7 @@ char2bin(char ch)
 
 typedef SLONG(*x2bin) (char ch);
 
-SLONG 
+SLONG
 ascii2bin(char *s)
 {
 	SLONG radix = 10;
@@ -97,7 +97,7 @@ ascii2bin(char *s)
 
 		while (*s != '\0') {
 			c = convertfunc(*s++);
-			result = result * 2 + ((c & 1) << 8) + ((c & 2) >> 1);
+			result = result * 2 + ((c & 2) << 7) + (c & 1);
 		}
 	} else {
 		while (*s != '\0')
@@ -107,7 +107,7 @@ ascii2bin(char *s)
 	return (result);
 }
 
-ULONG 
+ULONG
 ParseFixedPoint(char *s, ULONG size)
 {
 	//char dest[256];
@@ -133,7 +133,7 @@ ParseFixedPoint(char *s, ULONG size)
 	return (1);
 }
 
-ULONG 
+ULONG
 ParseNumber(char *s, ULONG size)
 {
 	char dest[256];
@@ -145,7 +145,7 @@ ParseNumber(char *s, ULONG size)
 	return (1);
 }
 
-ULONG 
+ULONG
 ParseSymbol(char *src, ULONG size)
 {
 	char dest[MAXSYMLEN + 1];
@@ -203,7 +203,7 @@ ParseSymbol(char *src, ULONG size)
 	}
 }
 
-ULONG 
+ULONG
 PutMacroArg(char *src, ULONG size)
 {
 	char *s;
@@ -221,7 +221,7 @@ PutMacroArg(char *src, ULONG size)
 	return (0);
 }
 
-ULONG 
+ULONG
 PutUniqueArg(char *src, ULONG size)
 {
 	char *s;
@@ -267,6 +267,7 @@ struct sLexInitString staticstrings[] = {
 	{"def", T_OP_DEF},
 
 	{"bank", T_OP_BANK},
+	{"align", T_OP_ALIGN},
 
 	{"round", T_OP_ROUND},
 	{"ceil", T_OP_CEIL},
@@ -280,6 +281,9 @@ struct sLexInitString staticstrings[] = {
 	{"acos", T_OP_ACOS},
 	{"atan", T_OP_ATAN},
 	{"atan2", T_OP_ATAN2},
+
+	{"high", T_OP_HIGH},
+	{"low", T_OP_LOW},
 
 	{"strcmp", T_OP_STRCMP},
 	{"strin", T_OP_STRIN},
@@ -301,9 +305,6 @@ struct sLexInitString staticstrings[] = {
 	{"ds", T_POP_DS},
 	{NAME_DB, T_POP_DB},
 	{NAME_DW, T_POP_DW},
-#ifdef NAME_DL
-	{NAME_DL, T_POP_DL},
-#endif
 	{"section", T_POP_SECTION},
 	{"purge", T_POP_PURGE},
 
@@ -328,25 +329,30 @@ struct sLexInitString staticstrings[] = {
 
 	{"if", T_POP_IF},
 	{"else", T_POP_ELSE},
+	{"elif", T_POP_ELIF},
 	{"endc", T_POP_ENDC},
+	
+	{"union", T_POP_UNION},
+	{"nextu", T_POP_NEXTU},
+	{"endu", T_POP_ENDU},
 
 	{"wram0", T_SECT_WRAM0},
-	{"bss", T_SECT_WRAM0}, /* deprecated */
 	{"vram", T_SECT_VRAM},
-	{"code", T_SECT_ROMX}, /* deprecated */
-	{"data", T_SECT_ROMX}, /* deprecated */
 	{"romx", T_SECT_ROMX},
-	{"home", T_SECT_ROM0}, /* deprecated */
 	{"rom0", T_SECT_ROM0},
 	{"hram", T_SECT_HRAM},
 	{"wramx", T_SECT_WRAMX},
 	{"sram", T_SECT_SRAM},
+	{"oam", T_SECT_OAM},
+
+	/* Deprecated section type names */
+	{"home", T_SECT_HOME},
+	{"code", T_SECT_CODE},
+	{"data", T_SECT_DATA},
+	{"bss", T_SECT_BSS},
 
 	{NAME_RB, T_POP_RB},
 	{NAME_RW, T_POP_RW},
-#ifdef NAME_RL
-	{NAME_RL, T_POP_RL},
-#endif
 	{"equ", T_POP_EQU},
 	{"equs", T_POP_EQUS},
 
@@ -388,7 +394,7 @@ struct sLexFloat tMacroUniqueToken = {
 	T_LEX_MACROUNIQUE
 };
 
-void 
+void
 setuplex(void)
 {
 	ULONG id;

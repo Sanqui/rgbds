@@ -36,18 +36,21 @@ ULONG nCurrentREPTBlockCount;
 
 ULONG ulMacroReturnValue;
 
+extern char *tzObjectname;
+extern FILE *dependfile;
+
 /*
  * defines for nCurrentStatus
  */
-#define STAT_isInclude 		0
-#define STAT_isMacro	 		1
+#define STAT_isInclude		0 /* 'Normal' state as well */
+#define STAT_isMacro		1
 #define STAT_isMacroArg		2
 #define STAT_isREPTBlock	3
 
 /*
  * Context push and pop
  */
-void 
+void
 pushcontext(void)
 {
 	struct sContext **ppFileStack;
@@ -84,7 +87,7 @@ pushcontext(void)
 		fatalerror("No memory for context");
 }
 
-int 
+int
 popcontext(void)
 {
 	struct sContext *pLastFile, **ppLastFile;
@@ -148,7 +151,38 @@ popcontext(void)
 		return (1);
 }
 
-int 
+int
+fstk_GetLine(void)
+{
+	struct sContext *pLastFile, **ppLastFile;
+
+	switch (nCurrentStatus) {
+	case STAT_isInclude:
+		/* This is the normal mode, also used when including a file. */
+		return nLineNo;
+	case STAT_isMacro:
+		break; /* Peek top file of the stack */
+	case STAT_isMacroArg:
+		return nLineNo; /* ??? */
+	case STAT_isREPTBlock:
+		break; /* Peek top file of the stack */
+	}
+
+	if ((pLastFile = pFileStack) != NULL) {
+		ppLastFile = &pFileStack;
+		while (pLastFile->pNext) {
+			ppLastFile = &(pLastFile->pNext);
+			pLastFile = *ppLastFile;
+		}
+		return pLastFile->nLine;
+	}
+
+	/* This is only reached if the lexer is in REPT or MACRO mode but there
+	 * are no saved contexts with the origin of said REPT or MACRO. */
+	fatalerror("fstk_GetLine: Internal error.");
+}
+
+int
 yywrap(void)
 {
 	return (popcontext());
@@ -157,7 +191,7 @@ yywrap(void)
 /*
  * Dump the context stack to stderr
  */
-void 
+void
 fstk_Dump(void)
 {
 	struct sContext *pLastFile;
@@ -176,10 +210,18 @@ fstk_Dump(void)
 /*
  * Extra includepath stuff
  */
-void 
+void
 fstk_AddIncludePath(char *s)
 {
-	strcpy(IncludePaths[NextIncPath++], s);
+	if (NextIncPath == MAXINCPATHS) {
+		fatalerror("Too many include directories passed from command line");
+		return;
+	}
+
+	if (strlcpy(IncludePaths[NextIncPath++], s, _MAX_PATH) >= _MAX_PATH) {
+		fatalerror("Include path too long '%s'",s);
+		return;
+	}
 }
 
 FILE *
@@ -190,11 +232,14 @@ fstk_FindFile(char *fname)
 	FILE *f;
 
 	if ((f = fopen(fname, "rb")) != NULL || errno != ENOENT) {
+		if (dependfile) {
+			fprintf(dependfile, "%s: %s\n", tzObjectname, fname);
+		}
 		return f;
 	}
 
 	for (i = 0; i < NextIncPath; ++i) {
-		if (strlcpy(path, IncludePaths[i], sizeof path) >= 
+		if (strlcpy(path, IncludePaths[i], sizeof path) >=
 		    sizeof path) {
 			continue;
 		}
@@ -203,6 +248,9 @@ fstk_FindFile(char *fname)
 		}
 
 		if ((f = fopen(path, "rb")) != NULL || errno != ENOENT) {
+			if (dependfile) {
+				fprintf(dependfile, "%s: %s\n", tzObjectname, path);
+			}
 			return f;
 		}
 	}
@@ -243,7 +291,7 @@ fstk_RunInclude(char *tzFileName)
 /*
  * Set up a macro for parsing
  */
-ULONG 
+ULONG
 fstk_RunMacro(char *s)
 {
 	struct sSymbol *sym;
@@ -270,7 +318,7 @@ fstk_RunMacro(char *s)
 /*
  * Set up a macroargument for parsing
  */
-void 
+void
 fstk_RunMacroArg(SLONG s)
 {
 	char *sym;
@@ -293,7 +341,7 @@ fstk_RunMacroArg(SLONG s)
 /*
  * Set up a stringequate for parsing
  */
-void 
+void
 fstk_RunString(char *s)
 {
 	struct sSymbol *pSym;
@@ -312,7 +360,7 @@ fstk_RunString(char *s)
 /*
  * Set up a repeat block for parsing
  */
-void 
+void
 fstk_RunRept(ULONG count)
 {
 	if (count) {
@@ -338,7 +386,9 @@ fstk_Init(char *s)
 {
 	char tzFileName[_MAX_PATH + 1];
 
-	sym_AddString("__FILE__", s);
+	char tzSymFileName[_MAX_PATH + 1 + 2];
+	snprintf(tzSymFileName, sizeof(tzSymFileName), "\"%s\"", s);
+	sym_AddString("__FILE__", tzSymFileName);
 
 	strcpy(tzFileName, s);
 	pFileStack = NULL;

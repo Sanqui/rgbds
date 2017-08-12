@@ -13,19 +13,19 @@ SLONG rpnstack[256];
 SLONG rpnp;
 SLONG nPC;
 
-void 
+void
 rpnpush(SLONG i)
 {
 	rpnstack[rpnp++] = i;
 }
 
-SLONG 
+SLONG
 rpnpop(void)
 {
 	return (rpnstack[--rpnp]);
 }
 
-SLONG 
+SLONG
 getsymvalue(SLONG symid)
 {
 	switch (pCurrentSection->tSymbols[symid]->Type) {
@@ -51,7 +51,7 @@ getsymvalue(SLONG symid)
 	errx(1, "*INTERNAL* UNKNOWN SYMBOL TYPE");
 }
 
-SLONG 
+SLONG
 getsymbank(SLONG symid)
 {
 	SLONG nBank;
@@ -68,17 +68,21 @@ getsymbank(SLONG symid)
 		errx(1, "*INTERNAL* UNKNOWN SYMBOL TYPE");
 	}
 
-	if (nBank >= BANK_WRAMX && nBank <= (BANK_WRAMX+6))
+	if (nBank == BANK_WRAM0 || nBank == BANK_ROM0 || nBank == BANK_OAM ||
+			nBank == BANK_HRAM) {
+		return 0;
+	} else if (nBank >= BANK_WRAMX && nBank < (BANK_WRAMX + BANK_COUNT_WRAMX)) {
 		return nBank - BANK_WRAMX + 1;
-	if (nBank >= BANK_VRAM && nBank <= (BANK_VRAM+1))
+	} else if (nBank >= BANK_VRAM && nBank < (BANK_VRAM + BANK_COUNT_VRAM)) {
 		return nBank - BANK_VRAM;
-	if (nBank >= BANK_SRAM && nBank <= (BANK_SRAM+3))
+	} else if (nBank >= BANK_SRAM && nBank < (BANK_SRAM + BANK_COUNT_SRAM)) {
 		return nBank - BANK_SRAM;
+	}
 
 	return nBank;
 }
 
-SLONG 
+SLONG
 calcrpn(struct sPatch * pPatch)
 {
 	SLONG t, size;
@@ -174,15 +178,6 @@ calcrpn(struct sPatch * pPatch)
 				    pPatch->pzFilename, pPatch->nLineNo);
 			}
 			break;
-		case RPN_PCEZP:
-			t = rpnpop();
-			rpnpush(t & 0xFF);
-			if (t < 0x2000 || t > 0x20FF) {
-				errx(1,
-				    "%s(%ld) : Value must be in the ZP area",
-				    pPatch->pzFilename, pPatch->nLineNo);
-			}
-			break;
 		case RPN_CONST:
 			/* constant */
 			t = (*rpn++);
@@ -211,35 +206,12 @@ calcrpn(struct sPatch * pPatch)
 			rpnpush(getsymbank(t));
 			size -= 4;
 			break;
-		case RPN_RANGECHECK:
-			{
-				SLONG low, high;
-
-				low = (*rpn++);
-				low |= (*rpn++) << 8;
-				low |= (*rpn++) << 16;
-				low |= (*rpn++) << 24;
-				high = (*rpn++);
-				high |= (*rpn++) << 8;
-				high |= (*rpn++) << 16;
-				high |= (*rpn++) << 24;
-				t = rpnpop();
-				if (t < low || t > high) {
-					errx(1,
-					    "%s(%ld) : Value must be in the range [%ld;%ld]",
-					    pPatch->pzFilename,
-					    pPatch->nLineNo, low, high);
-				}
-				rpnpush(t);
-				size -= 8;
-				break;
-			}
 		}
 	}
 	return (rpnpop());
 }
 
-void 
+void
 Patch(void)
 {
 	struct sSection *pSect;
@@ -269,22 +241,12 @@ Patch(void)
 				}
 				break;
 			case PATCH_WORD_L:
-			case PATCH_WORD_B:
 				if (t >= -32768 && t <= 65535) {
 					t &= 0xFFFF;
-					if (pPatch->Type == PATCH_WORD_L) {
-						pSect->pData[pPatch->nOffset] =
-						    t & 0xFF;
-						pSect->pData[pPatch->nOffset +
-						    1] =
-						    (t >> 8) & 0xFF;
-					} else {
-						//Assume big endian
-						    pSect->pData[pPatch->nOffset] =
-						    (t >> 8) & 0xFF;
-						pSect->pData[pPatch->nOffset +
-						    1] = t & 0xFF;
-					}
+					pSect->pData[pPatch->nOffset] =
+						t & 0xFF;
+					pSect->pData[pPatch->nOffset + 1] =
+						(t >> 8) & 0xFF;
 				} else {
 					errx(1,
 					    "%s(%ld) : Value must be 16-bit",
@@ -300,15 +262,6 @@ Patch(void)
 				    (t >> 16) & 0xFF;
 				pSect->pData[pPatch->nOffset + 3] =
 				    (t >> 24) & 0xFF;
-				break;
-			case PATCH_LONG_B:
-				pSect->pData[pPatch->nOffset + 0] =
-				    (t >> 24) & 0xFF;
-				pSect->pData[pPatch->nOffset + 1] =
-				    (t >> 16) & 0xFF;
-				pSect->pData[pPatch->nOffset + 2] =
-				    (t >> 8) & 0xFF;
-				pSect->pData[pPatch->nOffset + 3] = t & 0xFF;
 				break;
 			}
 

@@ -1,4 +1,18 @@
-.Dd February 26, 2015
+.\" Copyright © 2010 Anthony J. Bentley <anthony@anjbe.name>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED “AS IS” AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd April 17, 2017
 .Dt RGBASM 1
 .Os RGBDS Manual
 .Sh NAME
@@ -6,11 +20,12 @@
 .Nd Game Boy assembler
 .Sh SYNOPSIS
 .Nm rgbasm
-.Op Fl hv
+.Op Fl EhVvw
 .Op Fl b Ar chars
 .Op Fl D Ar name Ns Op = Ns Ar value
 .Op Fl g Ar chars
 .Op Fl i Ar path
+.Op Fl M Ar dependfile
 .Op Fl o Ar outfile
 .Op Fl p Ar pad_value
 .Ar file
@@ -29,6 +44,8 @@ Add string symbol to the compiled source code. This is equivalent to
 .Cm EQUS
 .Qq Ar "value"
 in code. If a value is not specified, a value of 1 is given.
+.It Fl E
+Export all labels, including unreferenced and local labels.
 .It Fl g Ar chars
 Change the four characters used for binary constants.
 The defaults are 0123.
@@ -45,15 +62,22 @@ The
 option disables this behavior.
 .It Fl i Ar path
 Add an include path.
+.It Fl M Ar dependfile
+Print
+.Xr make 1
+dependencies to
+.Ar dependfile .
 .It Fl o Ar outfile
 Write an object file to the given filename.
 .It Fl p Ar pad_value
 When padding an image, pad with this value.
 The default is 0x00.
+.It Fl V
+Print the version of the program and exit.
 .It Fl v
 Be verbose.
-.It Fl E
-Export all relocable symbols by default.
+.It Fl w
+Disable warning output.
 .El
 .Sh EXAMPLES
 Assembling a basic source file is simple:
@@ -66,10 +90,15 @@ run through
 and
 .Xr rgbfix 1 .
 .Sh SEE ALSO
+.Xr rgbasm 5 ,
 .Xr rgbfix 1 ,
 .Xr rgblink 1 ,
-.Xr rgbds 7
+.Xr rgbds 5 ,
+.Xr rgbds 7 ,
+.Xr gbz80 7
 .Sh HISTORY
 .Nm
 was originally written by Carsten S\(/orensen as part of the ASMotor package,
-and was later packaged in RGBDS by Justin Lloyd.
+and was later packaged in RGBDS by Justin Lloyd. It is now maintained by a
+number of contributors at
+.Lk https://github.com/rednex/rgbds .

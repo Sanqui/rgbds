@@ -1,16 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
 
 #include "extern/err.h"
+#include "link/assign.h"
 #include "link/mylink.h"
 #include "link/main.h"
+#include "link/script.h"
 #include "link/symbol.h"
-#include "link/assign.h"
 
 struct sFreeArea {
 	SLONG nOrg;
 	SLONG nSize;
 	struct sFreeArea *pPrev, *pNext;
+};
+
+struct sSectionAttributes {
+	const char *name;
+	SLONG bank;
+	SLONG offset; // bank + offset = bank originally stored in a section struct
+	SLONG minBank;
+	SLONG bankCount;
 };
 
 struct sFreeArea *BankFree[MAXBANKS];
@@ -20,12 +31,39 @@ SLONG MaxWBankUsed;
 SLONG MaxSBankUsed;
 SLONG MaxVBankUsed;
 
-#define DOMAXBANK(x)	{if( (x)>MaxBankUsed ) MaxBankUsed=(x);}
+const enum eSectionType SECT_MIN = SECT_WRAM0;
+const enum eSectionType SECT_MAX = SECT_OAM;
+const struct sSectionAttributes SECT_ATTRIBUTES[] = {
+	{"WRAM0", BANK_WRAM0, 0, 0, BANK_COUNT_WRAM0},
+	{"VRAM",  BANK_VRAM,  0, 0, BANK_COUNT_VRAM},
+	{"ROMX",  BANK_ROMX, -1, 1, BANK_COUNT_ROMX},
+	{"ROM0",  BANK_ROM0,  0, 0, BANK_COUNT_ROM0},
+	{"HRAM",  BANK_HRAM,  0, 0, BANK_COUNT_HRAM},
+	{"WRAMX", BANK_WRAMX, 0, 0, BANK_COUNT_WRAMX},
+	{"SRAM",  BANK_SRAM,  0, 0, BANK_COUNT_SRAM},
+	{"OAM",   BANK_OAM,   0, 0, BANK_COUNT_OAM}
+};
+
+#define DOMAXBANK(x, y) {switch (x) { \
+	case SECT_ROMX: DOMAXRBANK(y); break; \
+	case SECT_WRAMX: DOMAXWBANK(y); break; \
+	case SECT_SRAM: DOMAXSBANK(y); break; \
+	case SECT_VRAM: DOMAXVBANK(y); break; \
+	default: break; }}
+#define DOMAXRBANK(x)	{if( (x)>MaxBankUsed ) MaxBankUsed=(x);}
 #define DOMAXWBANK(x)	{if( (x)>MaxWBankUsed ) MaxWBankUsed=(x);}
 #define DOMAXSBANK(x)	{if( (x)>MaxSBankUsed ) MaxSBankUsed=(x);}
 #define DOMAXVBANK(x)	{if( (x)>MaxVBankUsed ) MaxVBankUsed=(x);}
 
-SLONG 
+void
+ensureSectionTypeIsValid(enum eSectionType type)
+{
+	if (type < SECT_MIN || type > SECT_MAX) {
+		errx(1, "(INTERNAL) Invalid section type found.");
+	}
+}
+
+SLONG
 area_Avail(SLONG bank)
 {
 	SLONG r;
@@ -42,60 +80,70 @@ area_Avail(SLONG bank)
 	return (r);
 }
 
-SLONG 
+SLONG
+area_doAlloc(struct sFreeArea *pArea, SLONG org, SLONG size)
+{
+	if (org >= pArea->nOrg && (org + size) <= (pArea->nOrg + pArea->nSize)) {
+		if (org == pArea->nOrg) {
+			pArea->nOrg += size;
+			pArea->nSize -= size;
+			return org;
+		} else {
+			if ((org + size) == (pArea->nOrg + pArea->nSize)) {
+				pArea->nSize -= size;
+				return org;
+			} else {
+				struct sFreeArea *pNewArea;
+
+				if ((pNewArea = malloc(sizeof(struct sFreeArea))) != NULL) {
+					*pNewArea = *pArea;
+					pNewArea->pPrev = pArea;
+					pArea->pNext = pNewArea;
+					pArea->nSize = org - pArea->nOrg;
+					pNewArea->nOrg = org + size;
+					pNewArea->nSize -= size + pArea->nSize;
+					return org;
+
+				} else {
+					err(1, NULL);
+				}
+			}
+		}
+	}
+
+	return -1;
+}
+
+SLONG
 area_AllocAbs(struct sFreeArea ** ppArea, SLONG org, SLONG size)
 {
 	struct sFreeArea *pArea;
 
 	pArea = *ppArea;
 	while (pArea) {
-		if (org >= pArea->nOrg
-		    && (org + size - 1) <= (pArea->nOrg + pArea->nSize - 1)) {
-			if (org == pArea->nOrg) {
-				pArea->nOrg += size;
-				pArea->nSize -= size;
-				return (org);
-			} else {
-				if ((org + size - 1) ==
-				    (pArea->nOrg + pArea->nSize - 1)) {
-					pArea->nSize -= size;
-					return (org);
-				} else {
-					struct sFreeArea *pNewArea;
-
-					if ((pNewArea =
-						malloc(sizeof(struct sFreeArea)))
-					    != NULL) {
-						*pNewArea = *pArea;
-						pNewArea->pPrev = pArea;
-						pArea->pNext = pNewArea;
-						pArea->nSize =
-						    org - pArea->nOrg;
-						pNewArea->nOrg = org + size;
-						pNewArea->nSize -=
-						    size + pArea->nSize;
-
-						return (org);
-					} else {
-						err(1, NULL);
-					}
-				}
-			}
+		SLONG result = area_doAlloc(pArea, org, size);
+		if (result != -1) {
+			return result;
 		}
+
 		ppArea = &(pArea->pNext);
 		pArea = *ppArea;
 	}
 
-	return (-1);
+	return -1;
 }
 
 SLONG
-area_AllocAbsSRAMAnyBank(SLONG org, SLONG size)
+area_AllocAbsAnyBank(SLONG org, SLONG size, enum eSectionType type)
 {
-	int i;
-	for (i = 0; i < 4; ++i) {
-		if (area_AllocAbs(&BankFree[BANK_SRAM + i], org, size) == org) {
-			return BANK_SRAM + i;
+	ensureSectionTypeIsValid(type);
+
+	SLONG startBank = SECT_ATTRIBUTES[type].bank;
+	SLONG bankCount = SECT_ATTRIBUTES[type].bankCount;
+
+	for (int i = 0; i < bankCount; i++) {
+		if (area_AllocAbs(&BankFree[startBank + i], org, size) != -1) {
+			return startBank + i;
 		}
 	}
 
@@ -103,276 +151,223 @@ area_AllocAbsSRAMAnyBank(SLONG org, SLONG size)
 }
 
 SLONG
-area_AllocAbsWRAMAnyBank(SLONG org, SLONG size)
-{
-	SLONG i;
-
-	for (i = 1; i <= 7; i += 1) {
-		if (area_AllocAbs(&BankFree[BANK_WRAMX + i - 1], org, size) == org) {
-			return BANK_WRAMX + i - 1;
-		}
-	}
-
-	return -1;
-}
-
-SLONG
-area_AllocAbsVRAMAnyBank(SLONG org, SLONG size)
-{
-	if (area_AllocAbs(&BankFree[BANK_VRAM], org, size) == org) {
-		return BANK_VRAM;
-	}
-	if (area_AllocAbs(&BankFree[BANK_VRAM + 1], org, size) == org) {
-		return BANK_VRAM + 1;
-	}
-
-	return -1;
-}
-
-SLONG 
-area_AllocAbsROMXAnyBank(SLONG org, SLONG size)
-{
-	SLONG i;
-
-	for (i = 1; i <= 511; i += 1) {
-		if (area_AllocAbs(&BankFree[i], org, size) == org)
-			return (i);
-	}
-
-	return (-1);
-}
-
-SLONG 
-area_Alloc(struct sFreeArea ** ppArea, SLONG size)
-{
+area_Alloc(struct sFreeArea ** ppArea, SLONG size, SLONG alignment) {
 	struct sFreeArea *pArea;
+	if (alignment < 1) {
+		alignment = 1;
+	}
 
 	pArea = *ppArea;
 	while (pArea) {
-		if (size <= pArea->nSize) {
-			SLONG r;
-
-			r = pArea->nOrg;
-			pArea->nOrg += size;
-			pArea->nSize -= size;
-
-			return (r);
+		SLONG org = pArea->nOrg;
+		if (org % alignment) {
+			org += alignment;
 		}
+		org -= org % alignment;
+
+		SLONG result = area_doAlloc(pArea, org, size);
+		if (result != -1) {
+			return result;
+		}
+
 		ppArea = &(pArea->pNext);
 		pArea = *ppArea;
 	}
 
-	return (-1);
+	return -1;
 }
 
 SLONG
-area_AllocVRAMAnyBank(SLONG size)
-{
-	SLONG i, org;
+area_AllocAnyBank(SLONG size, SLONG alignment, enum eSectionType type) {
+	ensureSectionTypeIsValid(type);
 
-	for (i = BANK_VRAM; i <= BANK_VRAM + 1; i += 1) {
-		if ((org = area_Alloc(&BankFree[i], size)) != -1)
-			return ((i << 16) | org);
-	}
+	SLONG startBank = SECT_ATTRIBUTES[type].bank;
+	SLONG bankCount = SECT_ATTRIBUTES[type].bankCount;
 
-	return (-1);
-}
-
-SLONG
-area_AllocSRAMAnyBank(SLONG size)
-{
-	SLONG i, org;
-	for (i = 0; i < 4; ++i) {
-		if ((org = area_Alloc(&BankFree[BANK_SRAM + i], size)) != -1) {
-			return (i << 16) | org;
+	for (int i = 0; i < bankCount; i++) {
+		SLONG org = area_Alloc(&BankFree[startBank + i], size, alignment);
+		if (org != -1) {
+			return ((startBank + i) << 16) | org;
 		}
 	}
 
 	return -1;
 }
 
-SLONG
-area_AllocWRAMAnyBank(SLONG size)
-{
-	SLONG i, org;
-
-	for (i = 1; i <= 7; i += 1) {
-		if ((org = area_Alloc(&BankFree[BANK_WRAMX + i - 1], size)) != -1) {
-			return (i << 16) | org;
-		}
-	}
-
-	return -1;
-}
-
-SLONG 
-area_AllocROMXAnyBank(SLONG size)
-{
-	SLONG i, org;
-
-	for (i = 1; i <= 511; i += 1) {
-		if ((org = area_Alloc(&BankFree[i], size)) != -1)
-			return ((i << 16) | org);
-	}
-
-	return (-1);
-}
-
 struct sSection *
-FindLargestWRAM(void)
+FindLargestSection(enum eSectionType type, bool bankFixed)
 {
 	struct sSection *pSection, *r = NULL;
 	SLONG nLargest = 0;
+	SLONG nLargestAlignment = 0;
 
 	pSection = pSections;
 	while (pSection) {
-		if (pSection->oAssigned == 0 && pSection->Type == SECT_WRAMX) {
-			if (pSection->nByteSize > nLargest) {
+		if (pSection->oAssigned == 0 && pSection->Type == type && (bankFixed ^ (pSection->nBank == -1))) {
+			if (pSection->nAlign > nLargestAlignment || (pSection->nAlign == nLargestAlignment && pSection->nByteSize > nLargest)) {
 				nLargest = pSection->nByteSize;
+				nLargestAlignment = pSection->nAlign;
 				r = pSection;
 			}
 		}
 		pSection = pSection->pNext;
 	}
+
 	return r;
 }
 
-struct sSection *
-FindLargestVRAM(void)
-{
-	struct sSection *pSection, *r = NULL;
-	SLONG nLargest = 0;
-
-	pSection = pSections;
-	while (pSection) {
-		if (pSection->oAssigned == 0 && pSection->Type == SECT_VRAM) {
-			if (pSection->nByteSize > nLargest) {
-				nLargest = pSection->nByteSize;
-				r = pSection;
-			}
-		}
-		pSection = pSection->pNext;
-	}
-	return r;
-}
-
-struct sSection *
-FindLargestSRAM(void)
-{
-	struct sSection *pSection, *r = NULL;
-	SLONG nLargest = 0;
-
-	pSection = pSections;
-	while (pSection) {
-		if (pSection->oAssigned == 0 && pSection->Type == SECT_SRAM) {
-			if (pSection->nByteSize > nLargest) {
-				nLargest = pSection->nByteSize;
-				r = pSection;
-			}
-		}
-		pSection = pSection->pNext;
-	}
-	return r;
-}
-
-struct sSection *
-FindLargestCode(void)
-{
-	struct sSection *pSection, *r = NULL;
-	SLONG nLargest = 0;
-
-	pSection = pSections;
-	while (pSection) {
-		if (pSection->oAssigned == 0 && pSection->Type == SECT_ROMX) {
-			if (pSection->nByteSize > nLargest) {
-				nLargest = pSection->nByteSize;
-				r = pSection;
-			}
-		}
-		pSection = pSection->pNext;
-	}
-	return (r);
-}
-
-void
-AssignVRAMSections(void)
+int
+IsSectionNameInUse(const char *name)
 {
 	struct sSection *pSection;
 
-	while ((pSection = FindLargestVRAM())) {
-		SLONG org;
+	pSection = pSections;
+	while (pSection) {
+		if (strcmp(pSection->pzName, name) == 0)
+			return 1;
 
-		if ((org = area_AllocVRAMAnyBank(pSection->nByteSize)) != -1) {
-			pSection->nOrg = org & 0xFFFF;
-			pSection->nBank = org >> 16;
-			pSection->oAssigned = 1;
-			DOMAXVBANK(pSection->nBank);
-		} else {
-			errx(1, "Unable to place VRAM section anywhere");
+		pSection = pSection->pNext;
+	}
+
+	return 0;
+}
+
+
+int
+IsSectionSameTypeBankAndFloating(const char *name, enum eSectionType type, int bank)
+{
+	struct sSection *pSection;
+
+	pSection = pSections;
+	while (pSection) {
+		if (pSection->oAssigned == 0) {
+			if (strcmp(pSection->pzName, name) == 0) {
+				/* Section must be floating in source */
+				if (pSection->nOrg != -1 || pSection->nAlign != 1)
+					return 0;
+				/* It must have the same type in source and linkerscript */
+				if (pSection->Type != type)
+					return 0;
+				/* Bank number must be unassigned in source or equal */
+				if (pSection->nBank != -1 && pSection->nBank != bank)
+					return 0;
+				return 1;
+			}
 		}
+		pSection = pSection->pNext;
+	}
+
+	errx(1, "Section \"%s\" not found (or already used).\n", name);
+}
+
+unsigned int
+AssignSectionAddressAndBankByName(const char *name, unsigned int address, int bank)
+{
+	struct sSection *pSection;
+
+	pSection = pSections;
+	while (pSection) {
+		if (pSection->oAssigned == 0) {
+			if (strcmp(pSection->pzName, name) == 0) {
+				if (pSection->nOrg != -1 || pSection->nAlign != 1)
+					errx(1, "Section \"%s\" from linkerscript isn't floating.\n", name);
+				if (pSection->nBank != -1 && pSection->nBank != bank)
+					errx(1, "Section \"%s\" from linkerscript has different bank number than in the source.\n", name);
+				pSection->nOrg = address;
+				pSection->nBank = bank;
+				pSection->nAlign = -1;
+				return pSection->nByteSize;
+			}
+		}
+		pSection = pSection->pNext;
+	}
+
+	errx(1, "Section \"%s\" not found (or already used).\n", name);
+}
+
+bool
+VerifyAndSetBank(struct sSection *pSection)
+{
+	ensureSectionTypeIsValid(pSection->Type);
+
+	if (pSection->nBank >= SECT_ATTRIBUTES[pSection->Type].minBank
+		&& pSection->nBank < SECT_ATTRIBUTES[pSection->Type].minBank + SECT_ATTRIBUTES[pSection->Type].bankCount) {
+		pSection->nBank += SECT_ATTRIBUTES[pSection->Type].bank + SECT_ATTRIBUTES[pSection->Type].offset;
+		return true;
+
+	} else {
+		return false;
 	}
 }
 
 void
-AssignSRAMSections(void)
+AssignFixedBankSections(enum eSectionType type)
 {
+	ensureSectionTypeIsValid(type);
+
 	struct sSection *pSection;
 
-	while ((pSection = FindLargestSRAM())) {
-		SLONG org;
-
-		if ((org = area_AllocSRAMAnyBank(pSection->nByteSize)) != -1) {
-			pSection->nOrg = org & 0xFFFF;
-			pSection->nBank = org >> 16;
-			pSection->nBank += BANK_SRAM;
+	while ((pSection = FindLargestSection(type, true))) {
+		if (VerifyAndSetBank(pSection) &&
+			(pSection->nOrg = area_Alloc(&BankFree[pSection->nBank], pSection->nByteSize, pSection->nAlign)) != -1) {
 			pSection->oAssigned = 1;
-			DOMAXSBANK(pSection->nBank);
+			DOMAXBANK(pSection->Type, pSection->nBank);
 		} else {
-			errx(1, "Unable to place SRAM section anywhere");
+			if (pSection->nAlign <= 1) {
+				errx(1, "Unable to place '%s' (%s section) in bank $%02lX",
+					pSection->pzName, SECT_ATTRIBUTES[pSection->Type].name, pSection->nBank);
+			} else {
+				errx(1, "Unable to place '%s' (%s section) in bank $%02lX (with $%lX-byte alignment)",
+					pSection->pzName, SECT_ATTRIBUTES[pSection->Type].name, pSection->nBank, pSection->nAlign);
+			}
 		}
 	}
 }
 
 void
-AssignWRAMSections(void)
+AssignFloatingBankSections(enum eSectionType type)
 {
+	ensureSectionTypeIsValid(type);
+
 	struct sSection *pSection;
 
-	while ((pSection = FindLargestWRAM())) {
+	while ((pSection = FindLargestSection(type, false))) {
 		SLONG org;
 
-		if ((org = area_AllocWRAMAnyBank(pSection->nByteSize)) != -1) {
+		if ((org = area_AllocAnyBank(pSection->nByteSize, pSection->nAlign, type)) != -1) {
+			if (options & OPT_OVERLAY) {
+				errx(1, "All sections must be fixed when using overlay");
+			}
 			pSection->nOrg = org & 0xFFFF;
 			pSection->nBank = org >> 16;
-			pSection->nBank += BANK_WRAMX - 1;
 			pSection->oAssigned = 1;
-			DOMAXWBANK(pSection->nBank);
+			DOMAXBANK(pSection->Type, pSection->nBank);
 		} else {
-			errx(1, "Unable to place WRAMX section anywhere");
+			const char *locality = "anywhere";
+			if (SECT_ATTRIBUTES[pSection->Type].bankCount > 1) {
+				locality = "in any bank";
+			}
+
+			if (pSection->nAlign <= 1) {
+				errx(1, "Unable to place '%s' (%s section) %s",
+					 pSection->pzName, SECT_ATTRIBUTES[type].name, locality);
+			} else {
+				errx(1, "Unable to place '%s' (%s section) %s (with $%lX-byte alignment)",
+					 pSection->pzName, SECT_ATTRIBUTES[type].name, locality, pSection->nAlign);
+			}
 		}
 	}
 }
 
-void 
-AssignCodeSections(void)
+char *tzLinkerscriptName = NULL;
+
+void
+SetLinkerscriptName(char *tzLinkerscriptFile)
 {
-	struct sSection *pSection;
-
-	while ((pSection = FindLargestCode())) {
-		SLONG org;
-
-		if ((org = area_AllocROMXAnyBank(pSection->nByteSize)) != -1) {
-			pSection->nOrg = org & 0xFFFF;
-			pSection->nBank = org >> 16;
-			pSection->oAssigned = 1;
-			DOMAXBANK(pSection->nBank);
-		} else {
-			errx(1, "Unable to place ROMX section anywhere");
-		}
-	}
+	tzLinkerscriptName = tzLinkerscriptFile;
 }
 
-void 
+void
 AssignSections(void)
 {
 	SLONG i;
@@ -392,63 +387,70 @@ AssignSections(void)
 			err(1, NULL);
 		}
 
-		if (i == 0) {
+		if (i == BANK_ROM0) {
 			/* ROM0 bank */
 			BankFree[i]->nOrg = 0x0000;
-			if (options & OPT_SMALL) {
+			if (options & OPT_TINY) {
 				BankFree[i]->nSize = 0x8000;
-				MaxAvail[i] = 0x8000;
 			} else {
 				BankFree[i]->nSize = 0x4000;
-				MaxAvail[i] = 0x4000;
 			}
-		} else if (i >= 1 && i <= 511) {
+		} else if (i >= BANK_ROMX && i < BANK_ROMX + BANK_COUNT_ROMX) {
 			/* Swappable ROM bank */
 			BankFree[i]->nOrg = 0x4000;
-			/*
-			 * Now, this shouldn't really be necessary... but for
-			 * good measure we'll do it anyway.
-			 */
-			if (options & OPT_SMALL) {
-				BankFree[i]->nSize = 0;
-				MaxAvail[i] = 0;
-			} else {
-				BankFree[i]->nSize = 0x4000;
-				MaxAvail[i] = 0x4000;
-			}
+			BankFree[i]->nSize = 0x4000;
 		} else if (i == BANK_WRAM0) {
 			/* WRAM */
 			BankFree[i]->nOrg = 0xC000;
-			BankFree[i]->nSize = 0x1000;
-			MaxAvail[i] = 0x1000;
-		} else if (i >= BANK_SRAM && i <= BANK_SRAM + 3) {
+			if (options & OPT_CONTWRAM) {
+				BankFree[i]->nSize = 0x2000;
+			} else {
+				BankFree[i]->nSize = 0x1000;
+			}
+		} else if (i >= BANK_SRAM && i < BANK_SRAM + BANK_COUNT_SRAM) {
 			/* Swappable SRAM bank */
 			BankFree[i]->nOrg = 0xA000;
 			BankFree[i]->nSize = 0x2000;
-			MaxAvail[i] = 0x2000;
-		} else if (i >= BANK_WRAMX && i <= BANK_WRAMX + 6) {
+		} else if (i >= BANK_WRAMX && i < BANK_WRAMX + BANK_COUNT_WRAMX) {
 			/* Swappable WRAM bank */
 			BankFree[i]->nOrg = 0xD000;
 			BankFree[i]->nSize = 0x1000;
-			MaxAvail[i] = 0x1000;
-		} else if (i == BANK_VRAM || i == BANK_VRAM + 1) {
+		} else if (i >= BANK_VRAM && i < BANK_VRAM + BANK_COUNT_VRAM) {
 			/* Swappable VRAM bank */
 			BankFree[i]->nOrg = 0x8000;
-			BankFree[i]->nSize = 0x2000;
-			MaxAvail[i] = 0x2000;
+			if (options & OPT_DMG_MODE && i != BANK_VRAM) {
+				BankFree[i]->nSize = 0;
+			} else {
+				BankFree[i]->nSize = 0x2000;
+			}
+		} else if (i == BANK_OAM) {
+			BankFree[i]->nOrg = 0xFE00;
+			BankFree[i]->nSize = 0x00A0;
 		} else if (i == BANK_HRAM) {
 			/* HRAM */
 			BankFree[i]->nOrg = 0xFF80;
 			BankFree[i]->nSize = 0x007F;
-			MaxAvail[i] = 0x007F;
+		} else {
+			errx(1, "(INTERNAL) Unknown bank type!");
 		}
+
+		MaxAvail[i] = BankFree[i]->nSize;
 		BankFree[i]->pPrev = NULL;
 		BankFree[i]->pNext = NULL;
 	}
 
 	/*
-	 * First, let's assign all the fixed sections...
-	 * And all because of that Jens Restemeier character ;)
+	 * First, let's parse the linkerscript.
+	 *
+	 */
+
+	if (tzLinkerscriptName) {
+		script_InitSections();
+		script_Parse(tzLinkerscriptName);
+	}
+
+	/*
+	 * Second, let's assign all the fixed sections...
 	 *
 	 */
 
@@ -460,241 +462,31 @@ AssignSections(void)
 
 			switch (pSection->Type) {
 			case SECT_WRAM0:
-				if (area_AllocAbs
-				    (&BankFree[BANK_WRAM0], pSection->nOrg,
-					pSection->nByteSize) != pSection->nOrg) {
-					errx(1,
-					    "Unable to load fixed WRAM0 "
-					    "section at $%lX", pSection->nOrg);
-				}
-				pSection->oAssigned = 1;
-				pSection->nBank = BANK_WRAM0;
-				break;
 			case SECT_HRAM:
-				if (area_AllocAbs
-				    (&BankFree[BANK_HRAM], pSection->nOrg,
-					pSection->nByteSize) != pSection->nOrg) {
-					errx(1, "Unable to load fixed HRAM "
-					    "section at $%lX", pSection->nOrg);
-				}
-				pSection->oAssigned = 1;
-				pSection->nBank = BANK_HRAM;
-				break;
-			case SECT_SRAM:
-				if (pSection->nBank == -1) {
-					/*
-					 * User doesn't care which bank.
-					 * Therefore he must here be specifying
-					 * position within the bank.
-					 * Defer until later.
-					 */
-					;
-				} else {
-					/*
-					 * User specified which bank to use.
-					 * Does he also care about position
-					 * within the bank?
-					 */
-					if (pSection->nOrg == -1) {
-						/*
-						 * Nope, any position will do
-						 * Again, we'll do that later
-						 *
-						 */
-						;
-					} else {
-						/*
-						 * Bank and position within the
-						 * bank are hardcoded.
-						 */
-
-						if (pSection->nBank >= 0
-						    && pSection->nBank <= 3) {
-							pSection->nBank +=
-							    BANK_SRAM;
-							if (area_AllocAbs
-							    (&BankFree
-							    [pSection->nBank],
-							    pSection->nOrg,
-							    pSection->nByteSize)
-							    != pSection->nOrg) {
-								errx(1,
-"Unable to load fixed SRAM section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-							}
-							DOMAXVBANK(pSection->
-							    nBank);
-							pSection->oAssigned = 1;
-						} else {
-							errx(1,
-"Unable to load fixed SRAM section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-						}
-					}
-				}
-				break;
-			case SECT_WRAMX:
-				if (pSection->nBank == -1) {
-					/*
-					 * User doesn't care which bank.
-					 * Therefore he must here be specifying
-					 * position within the bank.
-					 * Defer until later.
-					 */
-					;
-				} else {
-					/*
-					 * User specified which bank to use.
-					 * Does he also care about position
-					 * within the bank?
-					 */
-					if (pSection->nOrg == -1) {
-						/*
-						 * Nope, any position will do
-						 * Again, we'll do that later
-						 *
-						 */
-						;
-					} else {
-						/*
-						 * Bank and position within the
-						 * bank are hardcoded.
-						 */
-
-						if (pSection->nBank >= 0
-						    && pSection->nBank <= 6) {
-							pSection->nBank +=
-							    BANK_WRAMX;
-							if (area_AllocAbs
-							    (&BankFree
-							    [pSection->nBank],
-							    pSection->nOrg,
-							    pSection->nByteSize)
-							    != pSection->nOrg) {
-								errx(1,
-"Unable to load fixed WRAMX section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-							}
-							DOMAXWBANK(pSection->
-							    nBank);
-							pSection->oAssigned = 1;
-						} else {
-							errx(1,
-"Unable to load fixed WRAMX section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-						}
-					}
-				}
-				break;
-			case SECT_VRAM:
-				if (pSection->nBank == -1) {
-					/*
-					 * User doesn't care which bank.
-					 * Therefore he must here be specifying
-					 * position within the bank.
-					 * Defer until later.
-					 */
-					;
-				} else {
-					/*
-					 * User specified which bank to use.
-					 * Does he also care about position
-					 * within the bank?
-					 */
-					if (pSection->nOrg == -1) {
-						/*
-						 * Nope, any position will do
-						 * Again, we'll do that later
-						 *
-						 */
-						;
-					} else {
-						/*
-						 * Bank and position within the
-						 * bank are hardcoded.
-						 */
-
-						if (pSection->nBank >= 0
-						    && pSection->nBank <= 1) {
-							pSection->nBank +=
-							    BANK_VRAM;
-							if (area_AllocAbs
-							    (&BankFree
-							    [pSection->nBank],
-							    pSection->nOrg,
-							    pSection->nByteSize)
-							    != pSection->nOrg) {
-								errx(1,
-"Unable to load fixed VRAM section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-							}
-							DOMAXVBANK(pSection->
-							    nBank);
-							pSection->oAssigned = 1;
-						} else {
-							errx(1,
-"Unable to load fixed VRAM section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-						}
-					}
-				}
-				break;
 			case SECT_ROM0:
-				if (area_AllocAbs
-				    (&BankFree[BANK_ROM0], pSection->nOrg,
-					pSection->nByteSize) != pSection->nOrg) {
-					errx(1, "Unable to load fixed ROM0 "
-					    "section at $%lX", pSection->nOrg);
+			case SECT_OAM:
+				pSection->nBank = SECT_ATTRIBUTES[pSection->Type].bank;
+				if (area_AllocAbs(&BankFree[pSection->nBank], pSection->nOrg,
+					 pSection->nByteSize) == -1) {
+					errx(1, "Unable to place '%s' (%s section) at $%lX",
+						 pSection->pzName, SECT_ATTRIBUTES[pSection->Type].name, pSection->nOrg);
 				}
 				pSection->oAssigned = 1;
-				pSection->nBank = BANK_ROM0;
 				break;
+
+			case SECT_SRAM:
+			case SECT_WRAMX:
+			case SECT_VRAM:
 			case SECT_ROMX:
-				if (pSection->nBank == -1) {
-					/*
-					 * User doesn't care which bank, so he must want to
-					 * decide which position within that bank.
-					 * We'll do that at a later stage when the really
-					 * hardcoded things are allocated
-					 *
-					 */
-				} else {
-					/*
-					 * User wants to decide which bank we use
-					 * Does he care about the position as well?
-					 *
-					 */
-
-					if (pSection->nOrg == -1) {
-						/*
-						 * Nope, any position will do
-						 * Again, we'll do that later
-						 *
-						 */
+				if (pSection->nBank != -1 && pSection->nOrg != -1) {
+					if (VerifyAndSetBank(pSection) &&
+						area_AllocAbs(&BankFree[pSection->nBank], pSection->nOrg, pSection->nByteSize) != -1) {
+						DOMAXBANK(pSection->Type, pSection->nBank);
+						pSection->oAssigned = 1;
 					} else {
-						/*
-						 * How hardcore can you possibly get? Why does
-						 * he even USE this package? Yeah let's just
-						 * direct address everything, shall we?
-						 * Oh well, the customer is always right
-						 *
-						 */
-
-						if (pSection->nBank >= 1
-						    && pSection->nBank <= 511) {
-							if (area_AllocAbs
-							    (&BankFree
-								[pSection->nBank],
-								pSection->nOrg,
-								pSection->
-								nByteSize) !=
-							    pSection->nOrg) {
-								errx(1,
-								    "Unable to load fixed ROMX section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-							}
-							DOMAXBANK(pSection->
-							    nBank);
-							pSection->oAssigned = 1;
-						} else {
-							errx(1,
-							"Unable to load fixed ROMX section at $%lX in bank $%02lX", pSection->nOrg, pSection->nBank);
-						}
+						errx(1, "Unable to place '%s' (%s section) at $%lX in bank $%02lX",
+							pSection->pzName, SECT_ATTRIBUTES[pSection->Type].name, pSection->nOrg, pSection->nBank);
 					}
-
 				}
 				break;
 			}
@@ -703,82 +495,11 @@ AssignSections(void)
 	}
 
 	/*
-	 * Next, let's assign all the bankfixed ONLY ROMX sections...
+	 * Next, let's assign all the bankfixed ONLY sections...
 	 *
 	 */
-
-	pSection = pSections;
-	while (pSection) {
-		if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_ROMX
-		    && pSection->nOrg == -1 && pSection->nBank != -1) {
-			/* User wants to have a say... and he's pissed */
-			if (options & OPT_OVERLAY) {
-			    errx(1, "All ROM sections must be fixed when using overlay");
-            }
-			
-			if (pSection->nBank >= 1 && pSection->nBank <= 511) {
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[pSection->nBank],
-					    pSection->nByteSize)) == -1) {
-					errx(1,
-					"Unable to load fixed ROMX section into bank $%02lX", pSection->nBank);
-				}
-				pSection->oAssigned = 1;
-				DOMAXBANK(pSection->nBank);
-			} else {
-				errx(1, "Unable to load fixed ROMX section into bank $%02lX", pSection->nBank);
-			}
-		} else if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_SRAM
-		    && pSection->nOrg == -1 && pSection->nBank != -1) {
-			pSection->nBank += BANK_SRAM;
-			/* User wants to have a say... and he's pissed */
-			if (pSection->nBank >= BANK_SRAM && pSection->nBank <= BANK_SRAM + 3) {
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[pSection->nBank],
-					    pSection->nByteSize)) == -1) {
-					errx(1, "Unable to load fixed SRAM section into bank $%02lX", pSection->nBank);
-				}
-				pSection->oAssigned = 1;
-				DOMAXSBANK(pSection->nBank);
-			} else {
-				errx(1, "Unable to load fixed VRAM section into bank $%02lX", pSection->nBank);
-			}
-		} else if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_VRAM
-		    && pSection->nOrg == -1 && pSection->nBank != -1) {
-			pSection->nBank += BANK_VRAM;
-			/* User wants to have a say... and he's pissed */
-			if (pSection->nBank >= BANK_VRAM && pSection->nBank <= BANK_VRAM + 1) {
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[pSection->nBank],
-					    pSection->nByteSize)) == -1) {
-					errx(1, "Unable to load fixed VRAM section into bank $%02lX", pSection->nBank);
-				}
-				pSection->oAssigned = 1;
-				DOMAXVBANK(pSection->nBank);
-			} else {
-				errx(1, "Unable to load fixed VRAM section into bank $%02lX", pSection->nBank);
-			}
-		} else if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_WRAMX
-		    && pSection->nOrg == -1 && pSection->nBank != -1) {
-			pSection->nBank += BANK_WRAMX;
-			/* User wants to have a say... and he's pissed */
-			if (pSection->nBank >= BANK_WRAMX && pSection->nBank <= BANK_WRAMX + 6) {
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[pSection->nBank],
-					    pSection->nByteSize)) == -1) {
-					errx(1, "Unable to load fixed WRAMX section into bank $%02lX", pSection->nBank - BANK_WRAMX);
-				}
-				pSection->oAssigned = 1;
-				DOMAXWBANK(pSection->nBank);
-			} else {
-				errx(1, "Unable to load fixed WRAMX section into bank $%02lX", pSection->nBank - BANK_WRAMX);
-			}
-		}
-		pSection = pSection->pNext;
+	for (enum eSectionType i = SECT_MIN; i <= SECT_MAX; i++) {
+		AssignFixedBankSections(i);
 	}
 
 	/*
@@ -789,61 +510,30 @@ AssignSections(void)
 	pSection = pSections;
 	while (pSection) {
 		if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_ROMX
-		    && pSection->nOrg != -1 && pSection->nBank == -1) {
-			/* User wants to have a say... and he's back with a
-			 * vengeance */
+			&& pSection->nOrg != -1 && pSection->nBank == -1) {
 			if (options & OPT_OVERLAY) {
-			    errx(1, "All ROM sections must be fixed when using overlay");
-            }
-			if ((pSection->nBank =
-				area_AllocAbsROMXAnyBank(pSection->nOrg,
-				    pSection->nByteSize)) ==
-			    -1) {
-				errx(1, "Unable to load fixed ROMX section at $%lX into any bank", pSection->nOrg);
+				errx(1, "All sections must be fixed when using overlay");
 			}
-			pSection->oAssigned = 1;
-			DOMAXBANK(pSection->nBank);
-		} else if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_VRAM
-		    && pSection->nOrg != -1 && pSection->nBank == -1) {
-			/* User wants to have a say... and he's back with a
-			 * vengeance */
-			if ((pSection->nBank =
-				area_AllocAbsVRAMAnyBank(pSection->nOrg,
-				    pSection->nByteSize)) ==
-			    -1) {
-				errx(1, "Unable to load fixed VRAM section at $%lX into any bank", pSection->nOrg);
+			switch (pSection->Type) {
+			case SECT_ROMX:
+			case SECT_VRAM:
+			case SECT_SRAM:
+			case SECT_WRAMX:
+				if ((pSection->nBank =
+					area_AllocAbsAnyBank(pSection->nOrg, pSection->nByteSize,
+						pSection->Type)) == -1) {
+					errx(1, "Unable to place '%s' (%s section) at $%lX in any bank",
+						 pSection->pzName, SECT_ATTRIBUTES[pSection->Type].name, pSection->nOrg);
+				}
+				pSection->oAssigned = 1;
+				DOMAXBANK(pSection->Type, pSection->nBank);
+				break;
+
+			default: // Handle other sections later
+				break;
 			}
-			pSection->oAssigned = 1;
-			DOMAXVBANK(pSection->nBank);
-		} else if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_SRAM
-		    && pSection->nOrg != -1 && pSection->nBank == -1) {
-			/* User wants to have a say... and he's back with a
-			 * vengeance */
-			if ((pSection->nBank =
-				area_AllocAbsSRAMAnyBank(pSection->nOrg,
-				    pSection->nByteSize)) ==
-			    -1) {
-				errx(1, "Unable to load fixed SRAM section at $%lX into any bank", pSection->nOrg);
-			}
-			pSection->oAssigned = 1;
-			DOMAXSBANK(pSection->nBank);
-		} else if (pSection->oAssigned == 0
-		    && pSection->Type == SECT_WRAMX
-		    && pSection->nOrg != -1 && pSection->nBank == -1) {
-			/* User wants to have a say... and he's back with a
-			 * vengeance */
-			if ((pSection->nBank =
-				area_AllocAbsWRAMAnyBank(pSection->nOrg,
-				    pSection->nByteSize)) ==
-			    -1) {
-				errx(1, "Unable to load fixed WRAMX section at $%lX into any bank", pSection->nOrg);
-			}
-			pSection->oAssigned = 1;
-			DOMAXWBANK(pSection->nBank);
 		}
+
 		pSection = pSection->pNext;
 	}
 
@@ -852,67 +542,12 @@ AssignSections(void)
 	 * sections
 	 *
 	 */
-
-	pSection = pSections;
-	while (pSection) {
-		if (pSection->oAssigned == 0) {
-			switch (pSection->Type) {
-			case SECT_WRAM0:
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[BANK_WRAM0],
-					    pSection->nByteSize)) == -1) {
-					errx(1, "WRAM0 section too large");
-				}
-				pSection->nBank = BANK_WRAM0;
-				pSection->oAssigned = 1;
-				break;
-			case SECT_HRAM:
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[BANK_HRAM],
-					    pSection->nByteSize)) == -1) {
-					errx(1, "HRAM section too large");
-				}
-				pSection->nBank = BANK_HRAM;
-				pSection->oAssigned = 1;
-				break;
-			case SECT_SRAM:
-				break;
-			case SECT_VRAM:
-				break;
-			case SECT_WRAMX:
-				break;
-			case SECT_ROM0:
-			    if (options & OPT_OVERLAY) {
-			        errx(1, "All ROM sections must be fixed when using overlay");
-                }
-				if ((pSection->nOrg =
-					area_Alloc(&BankFree[BANK_ROM0],
-					    pSection->nByteSize)) == -1) {
-					errx(1, "ROM0 section too large");
-				}
-				pSection->nBank = BANK_ROM0;
-				pSection->oAssigned = 1;
-				break;
-			case SECT_ROMX:
-			    if (options & OPT_OVERLAY) {
-			        errx(1, "All ROM sections must be fixed when using overlay");
-                }
-				break;
-			default:
-				errx(1, "(INTERNAL) Unknown section type!");
-				break;
-			}
-		}
-		pSection = pSection->pNext;
+	for (enum eSectionType i = SECT_MIN; i <= SECT_MAX; i++) {
+		AssignFloatingBankSections(i);
 	}
-
-	AssignCodeSections();
-	AssignVRAMSections();
-	AssignWRAMSections();
-	AssignSRAMSections();
 }
 
-void 
+void
 CreateSymbolTable(void)
 {
 	struct sSection *pSect;
@@ -931,16 +566,21 @@ CreateSymbolTable(void)
 			    ((pSect->tSymbols[i]->pSection == pSect) ||
 				(pSect->tSymbols[i]->pSection == NULL))) {
 				if (pSect->tSymbols[i]->pSection == NULL)
-					sym_CreateSymbol(pSect->tSymbols[i]->
-					    pzName,
-					    pSect->tSymbols[i]->
-					    nOffset, -1);
+					sym_CreateSymbol(
+						pSect->tSymbols[i]->pzName,
+						pSect->tSymbols[i]->nOffset,
+						-1,
+						pSect->tSymbols[i]->pzObjFileName,
+						pSect->tSymbols[i]->pzFileName,
+						pSect->tSymbols[i]->nFileLine);
 				else
-					sym_CreateSymbol(pSect->tSymbols[i]->
-					    pzName,
-					    pSect->nOrg +
-					    pSect->tSymbols[i]->
-					    nOffset, pSect->nBank);
+					sym_CreateSymbol(
+						pSect->tSymbols[i]->pzName,
+						pSect->nOrg + pSect->tSymbols[i]->nOffset,
+						pSect->nBank,
+						pSect->tSymbols[i]->pzObjFileName,
+						pSect->tSymbols[i]->pzFileName,
+						pSect->tSymbols[i]->nFileLine);
 			}
 		}
 		pSect = pSect->pNext;

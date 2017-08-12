@@ -12,14 +12,16 @@
 struct ISymbol {
 	char *pzName;
 	SLONG nValue;
-	SLONG nBank;
-	    //-1 = const
+	SLONG nBank; /* -1 = constant */
+	char tzObjFileName[_MAX_PATH + 1]; /* Object file where the symbol was defined. */
+	char tzFileName[_MAX_PATH + 1]; /* Source file where the symbol was defined. */
+	ULONG nFileLine; /* Line where the symbol was defined. */
 	struct ISymbol *pNext;
 };
 
 struct ISymbol *tHash[HASHSIZE];
 
-SLONG 
+SLONG
 calchash(char *s)
 {
 	SLONG r = 0;
@@ -29,7 +31,7 @@ calchash(char *s)
 	return (r % HASHSIZE);
 }
 
-void 
+void
 sym_Init(void)
 {
 	SLONG i;
@@ -37,7 +39,7 @@ sym_Init(void)
 		tHash[i] = NULL;
 }
 
-SLONG 
+SLONG
 sym_GetValue(char *tzName)
 {
 	if (strcmp(tzName, "@") == 0) {
@@ -58,7 +60,7 @@ sym_GetValue(char *tzName)
 	}
 }
 
-SLONG 
+SLONG
 sym_GetBank(char *tzName)
 {
 	struct ISymbol **ppSym;
@@ -75,8 +77,9 @@ sym_GetBank(char *tzName)
 	errx(1, "Unknown symbol '%s'", tzName);
 }
 
-void 
-sym_CreateSymbol(char *tzName, SLONG nValue, SLONG nBank)
+void
+sym_CreateSymbol(char *tzName, SLONG nValue, SLONG nBank, char *tzObjFileName,
+		char *tzFileName, ULONG nFileLine)
 {
 	if (strcmp(tzName, "@") == 0)
 		return;
@@ -92,7 +95,10 @@ sym_CreateSymbol(char *tzName, SLONG nValue, SLONG nBank)
 			if (nBank == -1)
 				return;
 
-			errx(1, "Symbol '%s' defined more than once", tzName);
+			errx(1, "'%s' in both %s : %s(%d) and %s : %s(%d)",
+				tzName, tzObjFileName, tzFileName, nFileLine,
+				(*ppSym)->tzObjFileName,
+				(*ppSym)->tzFileName, (*ppSym)->nFileLine);
 		}
 	}
 
@@ -102,6 +108,11 @@ sym_CreateSymbol(char *tzName, SLONG nValue, SLONG nBank)
 			(*ppSym)->nValue = nValue;
 			(*ppSym)->nBank = nBank;
 			(*ppSym)->pNext = NULL;
+			strncpy((*ppSym)->tzObjFileName, tzObjFileName,
+				sizeof((*ppSym)->tzObjFileName));
+			strncpy((*ppSym)->tzFileName, tzFileName,
+				sizeof((*ppSym)->tzFileName));
+			(*ppSym)->nFileLine = nFileLine;
 		}
 	}
 }

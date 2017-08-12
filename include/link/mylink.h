@@ -8,9 +8,11 @@
 #include "types.h"
 
 extern SLONG options;
-#define OPT_SMALL	0x01
+#define OPT_TINY		0x01
 #define OPT_SMART_C_LINK	0x02
-#define OPT_OVERLAY	0x04
+#define OPT_OVERLAY		0x04
+#define OPT_CONTWRAM		0x08
+#define OPT_DMG_MODE		0x10
 
 enum eRpnData {
 	RPN_ADD = 0,
@@ -43,10 +45,6 @@ enum eRpnData {
 
 	RPN_HRAM,
 
-	RPN_PCEZP,
-
-	RPN_RANGECHECK,
-
 	RPN_CONST = 0x80,
 	RPN_SYM = 0x81
 };
@@ -58,14 +56,17 @@ enum eSectionType {
 	SECT_ROM0,
 	SECT_HRAM,
 	SECT_WRAMX,
-	SECT_SRAM
+	SECT_SRAM,
+	SECT_OAM
 };
 
 struct sSection {
 	SLONG nBank;
 	SLONG nOrg;
+	SLONG nAlign;
 	BBOOL oAssigned;
 
+	char *pzName;
 	SLONG nByteSize;
 	enum eSectionType Type;
 	UBYTE *pData;
@@ -88,14 +89,15 @@ struct sSymbol {
 	SLONG nSectionID;	/* internal to object.c */
 	struct sSection *pSection;
 	SLONG nOffset;
+	char *pzObjFileName; /* Object file where the symbol is located. */
+	char *pzFileName; /* Source file where the symbol was defined. */
+	ULONG nFileLine; /* Line where the symbol was defined. */
 };
 
 enum ePatchType {
 	PATCH_BYTE = 0,
 	PATCH_WORD_L,
-	PATCH_LONG_L,
-	PATCH_WORD_B,
-	PATCH_LONG_B
+	PATCH_LONG_L
 };
 
 struct sPatch {

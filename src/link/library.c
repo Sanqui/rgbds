@@ -7,7 +7,7 @@
 #include "link/mylink.h"
 #include "link/main.h"
 
-static BBOOL 
+static BBOOL
 symboldefined(char *name)
 {
 	struct sSection *pSect;
@@ -15,7 +15,7 @@ symboldefined(char *name)
 	pSect = pSections;
 
 	while (pSect) {
-		ULONG i;
+		int i;
 
 		for (i = 0; i < pSect->nNumberOfSymbols; i += 1) {
 			if ((pSect->tSymbols[i]->Type == SYM_EXPORT)
@@ -31,7 +31,7 @@ symboldefined(char *name)
 	return (0);
 }
 
-static BBOOL 
+static BBOOL
 addmodulecontaining(char *name)
 {
 	struct sSection **ppLSect;
@@ -39,7 +39,7 @@ addmodulecontaining(char *name)
 	ppLSect = &pLibSections;
 
 	while (*ppLSect) {
-		ULONG i;
+		int i;
 
 		for (i = 0; i < (*ppLSect)->nNumberOfSymbols; i += 1) {
 			if (((*ppLSect)->tSymbols[i]->Type == SYM_EXPORT)
@@ -66,7 +66,7 @@ addmodulecontaining(char *name)
 	return (0);
 }
 
-void 
+void
 AddNeededModules(void)
 {
 	struct sSection *pSect;
@@ -101,7 +101,7 @@ AddNeededModules(void)
 	pSect = pSections;
 
 	while (pSect) {
-		ULONG i;
+		int i;
 
 		for (i = 0; i < pSect->nNumberOfSymbols; i += 1) {
 			if ((pSect->tSymbols[i]->Type == SYM_IMPORT)
